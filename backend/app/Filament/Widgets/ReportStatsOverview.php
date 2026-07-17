@@ -14,8 +14,10 @@ class ReportStatsOverview extends BaseWidget
 
     protected function getStats(): array
     {
+        $date = filled($this->date) ? $this->date : now()->format('Y-m-d');
+
         $summary = app(ReportService::class)->getDailySummary(
-            $this->date ?? now()->format('Y-m-d')
+            $date
         );
 
         $pct = $summary['total_items'] > 0

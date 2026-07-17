@@ -61,9 +61,10 @@ class StockScanningService
     public function recordStock(StockSessionItem $item, array $qtyLevels, User $officer): void
     {
         DB::transaction(function () use ($item, $qtyLevels, $officer) {
-            $factors = self::parseConversionFactors($item->nama_barang);
+            $factors = $this->resolveQtyFactors($item);
+            $labels = $this->resolveQtyLabels($item);
             $qtyBase = self::calculateBaseQuantity($qtyLevels, $factors);
-            $qtyDisplay = self::buildQtyDisplay($qtyLevels, $item->satuan);
+            $qtyDisplay = self::buildQtyDisplay($qtyLevels, $labels);
             
             $selisih = $qtyBase - $item->qty_sistem_base;
             $status = $selisih === 0 ? StockSessionItemStatus::Matched : StockSessionItemStatus::Mismatched;
@@ -116,9 +117,10 @@ class StockScanningService
     public function updateStock(StockSessionItem $item, array $newQtyLevels, User $officer, ?string $reason = null): void
     {
         DB::transaction(function () use ($item, $newQtyLevels, $officer, $reason) {
-            $factors = self::parseConversionFactors($item->nama_barang);
+            $factors = $this->resolveQtyFactors($item);
+            $labels = $this->resolveQtyLabels($item);
             $qtyAfterBase = self::calculateBaseQuantity($newQtyLevels, $factors);
-            $qtyAfterDisplay = self::buildQtyDisplay($newQtyLevels, $item->satuan);
+            $qtyAfterDisplay = self::buildQtyDisplay($newQtyLevels, $labels);
 
             // Log adjustment
             StockAdjustmentLog::create([
@@ -203,11 +205,15 @@ class StockScanningService
      * @param string|null $size
      * @return string
      */
-    public static function buildQtyDisplay(array $qtyLevels, ?string $size): string
+    public static function buildQtyDisplay(array $qtyLevels, array|string|null $labelsOrSize): string
     {
+        if (is_array($labelsOrSize)) {
+            return self::buildQtyDisplayFromLabels($qtyLevels, $labelsOrSize);
+        }
+
         $labels = [];
-        if ($size) {
-            $labels = array_map(fn($s) => trim($s), explode('-', $size));
+        if ($labelsOrSize) {
+            $labels = array_map(fn($s) => trim($s), explode('-', $labelsOrSize));
         }
         if (empty($labels)) {
             $labels = ['CTN', 'PCS'];
@@ -225,6 +231,33 @@ class StockScanningService
             return "0 {$lastLabel}";
         }
         
+        return implode(' ', $displayParts);
+    }
+
+    /**
+     * Build user friendly qty display from explicit labels.
+     *
+     * @param int[] $qtyLevels
+     * @param array<int, string> $labels
+     */
+    public static function buildQtyDisplayFromLabels(array $qtyLevels, array $labels): string
+    {
+        if (empty($labels)) {
+            return self::buildQtyDisplay($qtyLevels, null);
+        }
+
+        $displayParts = [];
+
+        foreach ($labels as $index => $label) {
+            if (isset($qtyLevels[$index]) && (int) $qtyLevels[$index] > 0) {
+                $displayParts[] = "{$qtyLevels[$index]} {$label}";
+            }
+        }
+
+        if (empty($displayParts)) {
+            return '0 ' . ($labels[array_key_last($labels)] ?? 'PCS');
+        }
+
         return implode(' ', $displayParts);
     }
 
@@ -251,5 +284,29 @@ class StockScanningService
         }
         
         return $qtyLevels;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function resolveQtyLabels(StockSessionItem $item): array
+    {
+        $labels = $item->itemMaster?->getQtyLabelsArray() ?? [];
+
+        return ! empty($labels) ? $labels : ['CTN', 'PCS'];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    protected function resolveQtyFactors(StockSessionItem $item): array
+    {
+        $factors = $item->itemMaster?->getQtyFactorsArray() ?? [];
+
+        if (! empty($factors)) {
+            return $factors;
+        }
+
+        return self::parseConversionFactors($item->nama_barang);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ItemMasters\Schemas;
 
 use Filament\Actions\Action;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
 use Filament\Forms\Components\Toggle;
@@ -40,6 +41,22 @@ class ItemMasterForm
                     ->label('Principal'),
                 TextInput::make('satuan')
                     ->required(),
+                Repeater::make('qty_structure')
+                    ->label('Struktur Qty')
+                    ->helperText('Susun dari level terbesar ke terkecil. Contoh: CTN lalu PCS.')
+                    ->default([])
+                    ->columns(2)
+                    ->schema([
+                        TextInput::make('label')
+                            ->label('Label')
+                            ->required(),
+                        TextInput::make('factor')
+                            ->label('Faktor ke bawah')
+                            ->numeric()
+                            ->minValue(1)
+                            ->helperText('Contoh: CTN ke PCS = 12')
+                            ->nullable(),
+                    ]),
                 Toggle::make('status')
                     ->required(),
             ]);

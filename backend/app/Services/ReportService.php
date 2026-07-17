@@ -77,12 +77,19 @@ class ReportService
     }
 
     /**
-     * Get summary of all stock sessions for a specific date.
+     * Get detailed item rows across all stock sessions for a specific date.
      */
-    public function getDailyReport(string $date): Collection
+    public function getDailyDetailReport(string $date): Collection
     {
-        return StockSession::whereDate('session_date', $date)
-            ->with(['principal', 'assignedOfficer'])
+        return StockSessionItem::query()
+            ->with([
+                'stockSession.principal',
+                'stockSession.assignedOfficer',
+                'itemMaster',
+                'checkedBy',
+            ])
+            ->whereHas('stockSession', fn ($q) => $q->whereDate('session_date', $date))
+            ->orderBy('created_at')
             ->get();
     }
 
@@ -169,40 +176,59 @@ class ReportService
     }
 
     /**
-     * Build CSV content for a daily report (sessions summary).
+     * Build CSV content for a daily report (item details per principal).
      */
     public function buildDailyCsv(string $date): string
     {
-        $sessions = $this->getDailyReport($date);
+        $items = $this->getDailyDetailReport($date);
 
         $lines = [];
         $lines[] = implode(',', [
             'Tanggal',
+            'Principal Kode',
             'Principal',
+            'Item Kode',
+            'Barcode',
+            'Item',
+            'Size',
             'Status',
-            'Total Item',
-            'Tercek',
-            'Sesuai',
+            'Qty Sistem',
+            'Qty Aktual',
+            'Plus',
             'Selisih',
+            'Minus',
             'Petugas',
             'Jam Mulai',
-            'Jam Selesai',
+            'Jam Check',
         ]);
 
-        foreach ($sessions as $session) {
+        foreach ($items as $item) {
+            $session = $item->stockSession;
+            $qtySystem = $item->qty_sistem_base ?? 0;
+            $qtyActual = $item->qty_aktual_base;
+            $selisih = $item->selisih;
+            $plus = $selisih !== null && $selisih > 0 ? $selisih : 0;
+            $minus = $selisih !== null && $selisih < 0 ? abs($selisih) : 0;
+
             $lines[] = implode(',', array_map(
                 fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
                 [
-                    $session->session_date->format('Y-m-d'),
-                    $session->principal->nama,
-                    $session->status->value,
-                    $session->total_items,
-                    $session->checked_items,
-                    $session->matched_items,
-                    $session->mismatched_items,
-                    $session->assignedOfficer?->name ?? '-',
-                    $session->started_at?->format('H:i') ?? '-',
-                    $session->completed_at?->format('H:i') ?? '-',
+                    $session?->session_date?->format('Y-m-d') ?? '-',
+                    $session?->principal?->kode ?? '-',
+                    $session?->principal?->nama ?? '-',
+                    $item->kode_barang,
+                    $item->itemMaster?->barcode ?? '-',
+                    $item->nama_barang,
+                    $item->satuan ?? '-',
+                    $item->status->value,
+                    $qtySystem,
+                    $qtyActual ?? '-',
+                    $plus,
+                    $selisih ?? '-',
+                    $minus,
+                    $item->checkedBy?->name ?? '-',
+                    $session?->started_at?->format('H:i') ?? '-',
+                    $item->checked_at?->format('H:i') ?? '-',
                 ]
             ));
         }

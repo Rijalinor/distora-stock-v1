@@ -115,6 +115,68 @@ class StockSessionService
     }
 
     /**
+     * @return array{
+     *     date: string,
+     *     total_sessions: int,
+     *     active_sessions: int,
+     *     completed_sessions: int,
+     *     pending_principals: \Illuminate\Support\Collection<int, array<string, mixed>>
+     * }
+     */
+    public function summarizeTodaySessions(): array
+    {
+        $date = today()->toDateString();
+
+        $sessions = StockSession::query()
+            ->with('principal')
+            ->whereDate('session_date', $date)
+            ->get();
+
+        $pendingPrincipals = $sessions
+            ->filter(fn (StockSession $session) => $session->status !== StockSessionStatus::Completed)
+            ->map(fn (StockSession $session) => [
+                'principal' => $session->principal?->nama ?? '-',
+                'status' => $session->status->value,
+                'checked_items' => $session->checked_items,
+                'total_items' => $session->total_items,
+                'mismatched_items' => $session->mismatched_items,
+            ])
+            ->values();
+
+        return [
+            'date' => $date,
+            'total_sessions' => $sessions->count(),
+            'active_sessions' => $sessions->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress])->count(),
+            'completed_sessions' => $sessions->where('status', StockSessionStatus::Completed)->count(),
+            'pending_principals' => $pendingPrincipals,
+        ];
+    }
+
+    /**
+     * Close all non-completed sessions for today.
+     *
+     * @return int
+     */
+    public function closeTodaySessions(): int
+    {
+        return DB::transaction(function (): int {
+            $sessions = StockSession::query()
+                ->whereDate('session_date', today())
+                ->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress])
+                ->get();
+
+            foreach ($sessions as $session) {
+                $session->update([
+                    'status' => StockSessionStatus::Completed,
+                    'completed_at' => now(),
+                ]);
+            }
+
+            return $sessions->count();
+        });
+    }
+
+    /**
      * Recalculate progress counters for a session.
      *
      * @param StockSession $session

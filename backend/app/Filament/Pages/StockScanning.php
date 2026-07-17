@@ -251,7 +251,11 @@ class StockScanning extends Page
             return null;
         }
 
-        $session = StockSession::with(['principal', 'items' => fn ($q) => $q->orderBy('status')->orderBy('nama_barang')])
+        $session = StockSession::with([
+            'principal',
+            'items' => fn ($q) => $q->orderBy('status')->orderBy('nama_barang'),
+            'items.itemMaster',
+        ])
             ->find($this->selectedSessionId);
 
         if (! $session) {
@@ -273,7 +277,7 @@ class StockScanning extends Page
 
     protected function prepareQtyLevels(StockSessionItem $item): void
     {
-        $factors = StockScanningService::parseConversionFactors($item->nama_barang);
+        $factors = $this->getQtyFactorsForItem($item);
         $levelsCount = count($factors) + 1;
 
         if ($item->qty_aktual_base !== null) {
@@ -291,12 +295,16 @@ class StockScanning extends Page
      */
     protected function getQtyLabelsForItem(StockSessionItem $item): array
     {
-        $factors = StockScanningService::parseConversionFactors($item->nama_barang);
+        $factors = $this->getQtyFactorsForItem($item);
         $levelsCount = count($factors) + 1;
 
-        $labels = $item->satuan
-            ? array_values(array_filter(array_map('trim', explode('-', $item->satuan))))
-            : [];
+        $labels = $item->itemMaster?->getQtyLabelsArray() ?? [];
+
+        if (empty($labels)) {
+            $labels = $item->satuan
+                ? array_values(array_filter(array_map('trim', explode('-', $item->satuan))))
+                : [];
+        }
 
         if (empty($labels)) {
             $labels = ['CTN', 'PCS'];
@@ -313,6 +321,20 @@ class StockScanning extends Page
         }
 
         return $labels;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    protected function getQtyFactorsForItem(StockSessionItem $item): array
+    {
+        $factors = $item->itemMaster?->getQtyFactorsArray() ?? [];
+
+        if (! empty($factors)) {
+            return $factors;
+        }
+
+        return StockScanningService::parseConversionFactors($item->nama_barang);
     }
 
     protected function ensureSelectedSessionAccess(): bool

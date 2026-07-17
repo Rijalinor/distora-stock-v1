@@ -44,6 +44,7 @@ class Reports extends Page implements HasTable
 
     public function mount(): void
     {
+        $this->reportDate = $this->reportDate ?: today()->toDateString();
     }
 
     public static function canAccess(): bool
@@ -54,13 +55,13 @@ class Reports extends Page implements HasTable
     protected function getHeaderWidgets(): array
     {
         return [
-            ReportStatsOverview::make(['date' => $this->reportDate]),
+            ReportStatsOverview::make(['date' => $this->reportDate ?: null]),
         ];
     }
 
     protected function getHeaderActions(): array
     {
-        $dateLabel = Carbon::parse($this->reportDate)->format('d M Y');
+        $dateLabel = Carbon::parse($this->reportDate ?: today()->toDateString())->format('d M Y');
 
         return [
             Action::make('filterDate')
@@ -70,11 +71,11 @@ class Reports extends Page implements HasTable
                 ->form([
                     DatePicker::make('reportDate')
                         ->label('Tanggal Laporan')
-                        ->default($this->reportDate)
+                        ->default($this->reportDate ?: today()->toDateString())
                         ->native(false),
                 ])
                 ->action(function (array $data): void {
-                    $this->reportDate = $data['reportDate'];
+                    $this->reportDate = $data['reportDate'] ?: today()->toDateString();
                 }),
 
             ActionGroup::make([
