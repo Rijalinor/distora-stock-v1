@@ -1,145 +1,208 @@
-# Distora Stock — Aplikasi Stock Opname
+# Distora Stock
 
-Aplikasi **stock opname** (stock taking / physical inventory counting) untuk distributor — berbasis **Laravel 12** + **Filament 5.6** admin panel.
+Sistem **stock opname** untuk distributor berbasis **Laravel 12** dan **Filament 5.6**.
 
----
+Fokus utama aplikasi ini:
+- import data stok dari CSV
+- buat sesi stock opname per principal
+- scan barcode / kode barang
+- input qty aktual bertingkat
+- hitung selisih otomatis
+- tutup sesi harian
+- export laporan harian dan laporan selisih
 
-## Fitur
+## Ringkasan
 
-| Fitur | Status |
-|---|---|
-| Master Data Principal (supplier/brand) | ✅ Selesai |
-| Master Data Item (produk) | ✅ Selesai |
-| Manajemen User & Role (CRUD + assign role) | ✅ Selesai |
-| Import CSV data stok dari sistem lama | ✅ Selesai |
-| Generate sesi stock opname per principal | ✅ Selesai |
-| Scan barcode / kode barang | ✅ Selesai |
-| Catat qty aktual multi-level (CTN-PCS/PCK) | ✅ Selesai |
-| Hitung selisih otomatis | ✅ Selesai |
-| Koreksi qty dengan log adjustment | ✅ Selesai |
-| Progress tracking per sesi | ✅ Selesai |
-| Report & export CSV (harian / selisih) | ✅ Selesai |
-| Mobile App (pendamping) | ❌ Belum dimulai |
-| REST API | ❌ Belum dimulai |
+- **Backend:** Laravel 12
+- **Admin Panel:** Filament 5.6
+- **UI:** Server-rendered, Tailwind CSS 4
+- **Database:** SQLite untuk development, MySQL untuk production
+- **Testing:** PHPUnit 11
+- **Arsitektur:** Monolith dengan service layer
 
----
+## Fitur Utama
 
-## Tech Stack
+### Master Data
+- Principal CRUD
+- Item Master CRUD
+- User management untuk admin
+- Upload dan preview CSV stok
 
-| Layer | Teknologi |
-|---|---|
-| **Backend** | PHP 8.2, Laravel 12 |
-| **Admin Panel** | Filament 5.6 |
-| **Frontend** | Tailwind CSS 4, Vite 7 |
-| **Database** | SQLite (default) / MySQL |
-| **Testing** | PHPUnit 11 |
+### Stock Opname
+- Generate sesi per principal
+- Scan barcode atau kode barang
+- Input qty aktual multi-level
+- Perhitungan qty dasar otomatis
+- Status item: pending, matched, mismatched
+- Koreksi item dengan log adjustment
+- Progress sesi realtime
+- Selesai sesi dengan konfirmasi
 
----
+### Laporan
+- Ringkasan harian
+- Daftar sesi stock opname
+- Daftar item selisih
+- Export CSV laporan harian
+- Export CSV item selisih
 
-## Persyaratan Sistem
+### Mobile / Future
+- Folder `mobile/` disiapkan untuk aplikasi Flutter
+- Saat ini mobile app belum menjadi satu produk penuh
+- Rencana berikutnya: scan barcode via kamera pada aplikasi mobile
 
-- PHP ^8.2
-- Composer
-- Node.js & npm (untuk Vite)
-- SQLite atau MySQL/MariaDB
+## Alur Operasional
 
----
+1. Admin upload CSV stok.
+2. Sistem membaca data principal dan item.
+3. Sistem membuat sesi stock opname per principal.
+4. Petugas memilih sesi yang aktif.
+5. Petugas scan barcode atau input kode barang.
+6. Petugas isi qty aktual.
+7. Sistem hitung selisih otomatis.
+8. Admin menutup sesi harian setelah semua prinsipalnya dicek.
+9. Admin download laporan harian dan laporan selisih.
+
+## Struktur Qty
+
+Proyek ini menyimpan qty dalam bentuk:
+- `*_base` = satuan dasar / PCS
+- `*_display` = tampilan manusia, misalnya `1 CTN 12 PCS`
+
+Contoh:
+- `CTN = 12 PCS`
+- `PCS = 1 PCS`
+- qty aktual bisa dipecah menjadi beberapa level
+
+## Role
+
+### Admin
+- full access
+- kelola master data
+- kelola user
+- tutup sesi harian
+- lihat dan export laporan
+
+### Stock Officer
+- fokus ke sesi stock opname
+- scan barcode
+- input qty aktual
+- update item jika perlu
+- tidak fokus ke pengelolaan data master
+
+## Login Default
+
+Seeder tersedia untuk data awal:
+
+- `admin@distora.com` / `password`
+- `officer1@distora.com` / `password`
+- `officer2@distora.com` / `password`
 
 ## Instalasi
 
+Masuk ke folder backend:
+
 ```bash
-# 1. Clone & masuk ke direktori backend
 cd backend
-
-# 2. Copy environment
-cp .env.example .env
-
-# 3. Install dependencies PHP
-composer install
-
-# 4. Generate app key
-php artisan key:generate
-
-# 5. Buat database SQLite (jika pakai SQLite)
-php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
-
-# 6. Jalankan migrasi
-php artisan migrate
-
-# 7. Install & build asset frontend
-npm install
-npm run build
-
-# 8. Seed user default (admin + 2 stock officers)
-php artisan db:seed
-
-# Login: admin@distora.com / password
-# Atau: officer1@distora.com / password
 ```
 
-### Development Mode
+Install dependency:
 
 ```bash
-# Di folder backend:
+composer install
+npm install
+```
+
+Siapkan environment:
+
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+
+Jalankan migrasi:
+
+```bash
+php artisan migrate
+```
+
+Jika pakai SQLite, buat file database dulu:
+
+```bash
+php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
+```
+
+Jalankan seeder:
+
+```bash
+php artisan db:seed
+```
+
+Build asset:
+
+```bash
+npm run build
+```
+
+## Development
+
+Jalankan semua proses dev:
+
+```bash
 composer run dev
 ```
 
-Ini akan menjalankan 4 proses paralel:
-- `php artisan serve` — Laravel dev server
-- `php artisan queue:listen` — Queue worker
-- `php artisan pail` — Log viewer
-- `npm run dev` — Vite HMR
+Atau manual:
 
----
-
-## Struktur Direktori
-
+```bash
+php artisan serve
+npm run dev
+php artisan queue:listen
+php artisan pail
 ```
-distora-stock/
-├── backend/              # Aplikasi Laravel utama
-│   ├── app/
-│   │   ├── DTOs/         # Data Transfer Objects
-│   │   ├── Enums/        # Backed Enums (UserRole, Status, dll)
-│   │   ├── Filament/     # Admin panel (Pages, Resources)
-│   │   ├── Models/       # Eloquent Models
-│   │   └── Services/     # Business Logic (CsvImport, StockScanning, dll)
-│   ├── database/         # Migrations, Factories, Seeders
-│   ├── routes/           # Web routes
-│   └── tests/            # PHPUnit tests
-├── docs/                 # Dokumentasi (belum diisi)
-├── excel/                # Sample CSV data
-├── mobile/               # Rencana mobile app (belum dimulai)
-└── *.md                  # Dokumentasi proyek
-```
-
----
-
-## Workflow
-
-1. **Admin upload CSV** → data stok dari sistem lama di-import
-2. **Sistem buat sesi** → 1 sesi per principal, berisi daftar item
-3. **Petugas scan barcode** → pilih sesi → scan → input qty aktual
-4. **Sistem hitung selisih** → matched/mismatched otomatis
-5. **Sesi selesai** → semua item ter-check
-6. **Report** → lihat & export data selisih
-
----
 
 ## Testing
 
 ```bash
-cd backend
-composer run test
-```
-
-Atau:
-
-```bash
-cd backend
 php artisan test
 ```
 
----
+## Struktur Folder
+
+```text
+distora-stock/
+├── backend/                  # Aplikasi Laravel utama
+│   ├── app/
+│   │   ├── DTOs/
+│   │   ├── Enums/
+│   │   ├── Filament/
+│   │   ├── Models/
+│   │   └── Services/
+│   ├── database/
+│   ├── resources/
+│   ├── routes/
+│   └── tests/
+├── mobile/                   # Rencana Flutter mobile app
+├── docs/                     # Dokumentasi tambahan
+├── excel/                    # Contoh file CSV / Excel
+├── CHANGELOG.md
+├── PROJECT_STATUS.md
+└── SESSION_HANDOVER.md
+```
+
+## Catatan Teknis
+
+- Semua interaksi utama saat ini lewat Filament panel.
+- REST API belum menjadi bagian utama arsitektur.
+- Barcode matching mencari `barcode` dulu, lalu fallback ke `kode_barang`.
+- Sesi stock opname berjalan per tanggal aktif.
+- Penutupan sesi harian dilakukan oleh admin.
+
+## Dokumentasi Tambahan
+
+- `CHANGELOG.md` — riwayat perubahan
+- `PROJECT_STATUS.md` — status fitur
+- `SESSION_HANDOVER.md` — konteks teknis cepat
+- `backend/README.md` — ringkasan backend
 
 ## Lisensi
 

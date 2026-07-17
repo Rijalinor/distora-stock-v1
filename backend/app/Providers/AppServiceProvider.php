@@ -31,10 +31,19 @@ class AppServiceProvider extends ServiceProvider
             'panels::head.end',
             fn (): string => <<<'HTML'
 <link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/pwa-icon.svg" sizes="any" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/pwa-icon.svg">
 <meta name="theme-color" content="#111827">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Distora Stock">
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    });
+}
+</script>
 HTML
         );
 

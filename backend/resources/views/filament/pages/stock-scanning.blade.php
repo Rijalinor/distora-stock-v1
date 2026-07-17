@@ -355,7 +355,11 @@
                         </div>
                     @endif
 
-                    <div class="{{ $isEditing ? 'mt-4' : 'mt-6' }} grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div @class([
+                        'grid grid-cols-1 gap-3 sm:grid-cols-2',
+                        'mt-4' => $isEditing,
+                        'mt-6' => ! $isEditing,
+                    ])>
                         @if (! $isEditing)
                             <x-filament::button
                                 wire:click="markComplete"
@@ -373,7 +377,10 @@
                             :color="$isEditing ? 'primary' : 'warning'"
                             size="xl"
                             :icon="$isEditing ? 'heroicon-m-check' : 'heroicon-m-exclamation-triangle'"
-                            class="{{ $isEditing ? 'col-span-2' : '' }} w-full"
+                            @class([
+                                'w-full',
+                                'col-span-2' => $isEditing,
+                            ])
                         >
                             {{ $isEditing ? 'Simpan Koreksi' : 'Catat Selisih' }}
                         </x-filament::button>
