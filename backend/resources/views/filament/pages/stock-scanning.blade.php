@@ -196,16 +196,16 @@
                         </div>
                     </div>
 
-                    @if ($session->checked_items === $session->total_items && $session->total_items > 0)
-                        <x-filament::button
-                            wire:click="completeSession"
-                            color="success"
-                            size="lg"
-                            icon="heroicon-m-check-circle"
-                        >
-                            Selesai
-                        </x-filament::button>
-                    @endif
+                    <x-filament::button
+                        type="button"
+                        color="success"
+                        size="lg"
+                        icon="heroicon-m-check-circle"
+                        x-data
+                        x-on:click.prevent="if (confirm('Yakin ingin menyelesaikan sesi ini? Item yang belum dicek tetap akan dianggap belum diperiksa.')) { $wire.completeSession() }"
+                    >
+                        Selesaikan Sesi
+                    </x-filament::button>
                 </div>
 
                 <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">

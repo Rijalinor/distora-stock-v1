@@ -108,12 +108,6 @@ class StockSessionService
      */
     public function completeSession(StockSession $session): void
     {
-        // Optional validation: ensure all items are checked
-        $hasPending = $session->items()->where('status', StockSessionItemStatus::Pending)->exists();
-        if ($hasPending) {
-            throw new \Exception("Cannot complete session: some items have not been scanned or checked.");
-        }
-
         $session->update([
             'status' => StockSessionStatus::Completed,
             'completed_at' => now(),
