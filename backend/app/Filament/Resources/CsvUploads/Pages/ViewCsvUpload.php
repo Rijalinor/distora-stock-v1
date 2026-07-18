@@ -59,7 +59,7 @@ class ViewCsvUpload extends ViewRecord
                     ->columns(3),
 
                 Section::make('Grouping per Principal')
-                    ->description('Sistem akan membuat satu sesi stock opname untuk setiap principal di bawah ini.')
+                    ->description('Sistem akan membuka sesi stock opname dari data ini. Principal yang digabung akan masuk ke sesi principal induknya.')
                     ->schema([
                         TextEntry::make('summary')
                             ->label('')
@@ -104,12 +104,12 @@ class ViewCsvUpload extends ViewRecord
     {
         return [
             Action::make('generateSessions')
-                ->label('Generate Session')
+                ->label('Buka Sesi Stock Opname')
                 ->icon('heroicon-o-play')
                 ->color('success')
                 ->requiresConfirmation()
-                ->modalHeading('Generate Stock Session?')
-                ->modalDescription('Sistem akan membuat sesi stock opname terpisah untuk setiap principal. Lanjutkan?')
+                ->modalHeading('Buka sesi stock opname?')
+                ->modalDescription('Sesi akan dibuat dari upload ini. Principal yang sudah digabung akan disatukan ke principal induknya.')
                 ->visible(fn () => $this->record->status === CsvUploadStatus::Previewed)
                 ->action(function () {
                     $importService = app(CsvImportService::class);

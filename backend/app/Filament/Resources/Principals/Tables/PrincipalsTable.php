@@ -22,6 +22,11 @@ class PrincipalsTable
                 TextColumn::make('nama')
                     ->searchable(),
 
+                TextColumn::make('groupPrincipal.nama')
+                    ->label('Gabung ke')
+                    ->placeholder('-')
+                    ->searchable(),
+
                 IconColumn::make('status')
                     ->boolean(),
 

@@ -68,12 +68,7 @@
 
         <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/5">
             <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <div class="text-sm font-semibold text-gray-900 dark:text-white">
-                        Install PWA
-                    </div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400" x-text="installStatus"></div>
-                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400" x-text="installStatus"></div>
 
                 <button
                     type="button"

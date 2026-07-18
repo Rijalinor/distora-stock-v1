@@ -125,7 +125,7 @@ class Reports extends Page implements HasTable
             ->query(
                 StockSessionItem::query()
                     ->with(['stockSession.principal', 'checkedBy'])
-                    ->where('status', StockSessionItemStatus::Mismatched)
+                    ->whereIn('status', [StockSessionItemStatus::Mismatched, StockSessionItemStatus::Missing])
                     ->when($this->reportDate, fn (Builder $q) => $q->whereHas(
                         'stockSession',
                         fn (Builder $q) => $q->whereDate('session_date', $this->reportDate)

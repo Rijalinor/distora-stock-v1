@@ -160,6 +160,22 @@ php artisan queue:listen
 php artisan pail
 ```
 
+## Operasional Lokal Satu Klik
+
+Untuk menjalankan aplikasi dari PC kantor/gudang:
+
+```bat
+START-DISTORA.bat
+```
+
+Untuk stop:
+
+```bat
+STOP-DISTORA.bat
+```
+
+Panduan lengkap ada di `docs/OPERASIONAL-LOKAL.md`.
+
 ## Testing
 
 ```bash
@@ -202,6 +218,7 @@ distora-stock/
 - `CHANGELOG.md` — riwayat perubahan
 - `PROJECT_STATUS.md` — status fitur
 - `SESSION_HANDOVER.md` — konteks teknis cepat
+- `docs/OPERASIONAL-LOKAL.md` — panduan start/stop lokal satu klik
 - `backend/README.md` — ringkasan backend
 
 ## Lisensi

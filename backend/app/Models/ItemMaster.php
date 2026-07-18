@@ -29,6 +29,26 @@ class ItemMaster extends Model
         return $this->belongsTo(Principal::class);
     }
 
+    public function setQtyStructureAttribute($value): void
+    {
+        if (! is_array($value)) {
+            $this->attributes['qty_structure'] = null;
+
+            return;
+        }
+
+        $structure = collect($value)
+            ->filter(fn ($level) => is_array($level) && filled($level['label'] ?? null))
+            ->map(fn ($level) => [
+                'label' => strtoupper(trim((string) $level['label'])),
+                'factor' => max(1, (int) ($level['factor'] ?? 1)),
+            ])
+            ->values()
+            ->all();
+
+        $this->attributes['qty_structure'] = empty($structure) ? null : json_encode($structure);
+    }
+
     public function stockSessionItems()
     {
         return $this->hasMany(StockSessionItem::class);

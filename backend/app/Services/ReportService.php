@@ -38,7 +38,7 @@ class ReportService
     public function getAllSelisihItems(?string $date = null): Collection
     {
         $query = StockSessionItem::query()
-            ->where('status', StockSessionItemStatus::Mismatched)
+            ->whereIn('status', [StockSessionItemStatus::Mismatched, StockSessionItemStatus::Missing])
             ->with(['stockSession.principal', 'stockSession.assignedOfficer', 'checkedBy']);
 
         if ($date) {

@@ -4,7 +4,40 @@
         $qtyLabels = $this->getQtyLabels();
     @endphp
 
-    <div class="mx-auto w-full max-w-4xl space-y-6 px-3 sm:px-0">
+    <div
+        x-data="{
+            beep(frequency = 880, duration = 120) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+                if (! AudioContext) {
+                    return;
+                }
+
+                const context = new AudioContext();
+                const oscillator = context.createOscillator();
+                const gain = context.createGain();
+
+                oscillator.frequency.value = frequency;
+                oscillator.connect(gain);
+                gain.connect(context.destination);
+                gain.gain.setValueAtTime(0.08, context.currentTime);
+                oscillator.start();
+                oscillator.stop(context.currentTime + duration / 1000);
+            },
+            feedbackSuccess() {
+                navigator.vibrate?.(80);
+                this.beep(900, 110);
+                this.$nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+            },
+            feedbackError() {
+                navigator.vibrate?.([80, 60, 80]);
+                this.beep(220, 180);
+            },
+        }"
+        x-on:stock-item-scanned.window="feedbackSuccess()"
+        x-on:stock-scan-failed.window="feedbackError()"
+        class="mx-auto w-full max-w-4xl space-y-6 px-3 sm:px-0"
+    >
         @if (! $session)
             <x-filament::section>
                 <x-slot name="heading">
@@ -63,6 +96,7 @@
                     : 0;
             @endphp
 
+            @if (! $scannedItem)
             <x-filament::section>
                 <x-slot name="heading">
                     <span class="text-2xl sm:text-3xl">Scan Barcode</span>
@@ -76,6 +110,10 @@
                         stream: null,
                         detector: null,
                         scanning: false,
+                        torchOn: false,
+                        torchSupported: false,
+                        lastScanValue: null,
+                        lastScanAt: 0,
                         status: 'Kamera belum aktif',
                         async initCamera() {
                             if (! navigator.mediaDevices?.getUserMedia) {
@@ -101,6 +139,8 @@
                                 this.$refs.video.srcObject = this.stream;
                                 await this.$refs.video.play();
                                 this.scanning = true;
+                                const track = this.getVideoTrack();
+                                this.torchSupported = Boolean(track?.getCapabilities?.().torch);
                                 this.status = 'Kamera aktif, arahkan ke barcode';
                                 this.scanFrame();
                             } catch (error) {
@@ -119,6 +159,15 @@
                                     const value = codes[0].rawValue?.trim();
 
                                     if (value) {
+                                        const now = Date.now();
+
+                                        if (value === this.lastScanValue && now - this.lastScanAt < 1500) {
+                                            requestAnimationFrame(() => this.scanFrame());
+                                            return;
+                                        }
+
+                                        this.lastScanValue = value;
+                                        this.lastScanAt = now;
                                         this.$dispatch('barcode-detected', { value });
                                         this.stopCamera();
                                         return;
@@ -132,8 +181,34 @@
 
                             requestAnimationFrame(() => this.scanFrame());
                         },
+                        getVideoTrack() {
+                            return this.stream?.getVideoTracks?.()[0] ?? null;
+                        },
+                        async toggleTorch() {
+                            const track = this.getVideoTrack();
+
+                            if (! track?.getCapabilities?.().torch) {
+                                this.status = 'Lampu tidak didukung perangkat ini';
+                                return;
+                            }
+
+                            try {
+                                this.torchOn = ! this.torchOn;
+                                await track.applyConstraints({
+                                    advanced: [{ torch: this.torchOn }],
+                                });
+                                this.status = this.torchOn
+                                    ? 'Lampu aktif, arahkan ke barcode'
+                                    : 'Lampu dimatikan';
+                            } catch (error) {
+                                this.torchOn = false;
+                                this.status = 'Gagal mengatur lampu kamera';
+                            }
+                        },
                         stopCamera() {
                             this.scanning = false;
+                            this.torchOn = false;
+                            this.torchSupported = false;
 
                             if (this.stream) {
                                 this.stream.getTracks().forEach(track => track.stop());
@@ -150,9 +225,13 @@
                     x-on:barcode-detected.window="$wire.scanBarcode($event.detail.value)"
                     class="space-y-5"
                 >
-                    <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="grid gap-3 sm:grid-cols-3">
                         <x-filament::button type="button" size="xl" color="primary" x-on:click="initCamera()">
                             Aktifkan Kamera
+                        </x-filament::button>
+
+                        <x-filament::button type="button" size="xl" color="warning" x-on:click="toggleTorch()">
+                            Lampu
                         </x-filament::button>
 
                         <x-filament::button type="button" size="xl" color="gray" x-on:click="stopCamera()">
@@ -171,7 +250,6 @@
                         <x-filament::input
                             type="text"
                             wire:model="barcode"
-                            autofocus
                             placeholder="Ketik atau scan barcode..."
                             class="text-xl"
                         />
@@ -181,21 +259,21 @@
                     </form>
                 </div>
             </x-filament::section>
+            @endif
 
-            <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
-                <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                        <div class="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Principal</div>
-                        <div class="mt-1 break-words text-lg font-bold leading-tight text-gray-900 dark:text-white">
-                            {{ $session->principal->nama }}
-                        </div>
-                        <div class="mt-1 text-sm text-gray-500">
-                            {{ $session->checked_items }}/{{ $session->total_items }} item
-                            &bull; {{ $session->matched_items }} sesuai
-                            &bull; {{ $session->mismatched_items }} selisih
-                        </div>
-                    </div>
+            @if (! $scannedItem)
+            <x-filament::section>
+                <x-slot name="heading">
+                    {{ $session->principal->nama }}
+                </x-slot>
 
+                <x-slot name="description">
+                    {{ $session->checked_items }}/{{ $session->total_items }} item
+                    &bull; {{ $session->matched_items }} sesuai
+                    &bull; {{ $session->mismatched_items }} selisih
+                </x-slot>
+
+                <x-slot name="headerEnd">
                     <x-filament::button
                         type="button"
                         color="success"
@@ -206,7 +284,7 @@
                     >
                         Selesaikan Sesi
                     </x-filament::button>
-                </div>
+                </x-slot>
 
                 <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
                     <div class="h-full rounded-full bg-primary-500 transition-all duration-500" style="width: {{ $pct }}%"></div>
@@ -218,7 +296,7 @@
                         Ganti Principal
                     </button>
                 </div>
-            </div>
+            </x-filament::section>
 
             @php
                 $mismatchedItems = $session->items->where('status', \App\Enums\StockSessionItemStatus::Mismatched);
@@ -281,6 +359,7 @@
                     @endif
                 </x-filament::section>
             @endif
+            @endif
 
             @if ($scannedItem)
                 <x-filament::section>
@@ -288,102 +367,125 @@
                         <span class="flex flex-wrap items-center gap-2">
                             {{ $scannedItem->nama_barang }}
                             <x-filament::badge
-                                :color="$scannedItem->status === \App\Enums\StockSessionItemStatus::Matched ? 'success' : ($scannedItem->status === \App\Enums\StockSessionItemStatus::Mismatched ? 'danger' : 'gray')"
+                                :color="match ($scannedItem->status) {
+                                    \App\Enums\StockSessionItemStatus::Matched => 'success',
+                                    \App\Enums\StockSessionItemStatus::Mismatched => 'danger',
+                                    \App\Enums\StockSessionItemStatus::Missing => 'warning',
+                                    default => 'gray',
+                                }"
                                 size="lg"
                             >
-                                {{ $scannedItem->status->value }}
+                                {{ $scannedItem->status === \App\Enums\StockSessionItemStatus::Missing ? 'tidak ada' : $scannedItem->status->value }}
                             </x-filament::badge>
                         </span>
                     </x-slot>
-                    <x-slot name="description">{{ $scannedItem->kode_barang }}</x-slot>
 
-                    <button
-                        type="button"
-                        wire:click="resetScanState"
-                        class="mb-4 flex items-center gap-2 text-base font-semibold text-primary-600 hover:text-primary-500 dark:text-primary-400"
-                    >
-                        <x-filament::icon icon="heroicon-m-arrow-left" class="h-5 w-5" />
-                        Scan barang lain
-                    </button>
+                    <x-slot name="description">
+                        {{ $scannedItem->kode_barang }}
+                    </x-slot>
 
-                    <div class="mt-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 dark:bg-amber-500/10">
-                        <div class="text-sm font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-300">Qty Sistem</div>
-                        <div class="mt-1 text-3xl font-black text-gray-900 dark:text-white">{{ $scannedItem->qty_sistem_display }}</div>
-                    </div>
+                    <x-slot name="headerEnd">
+                        <x-filament::button
+                            type="button"
+                            wire:click="resetScanState"
+                            color="gray"
+                            icon="heroicon-m-arrow-left"
+                        >
+                            Scan Lagi
+                        </x-filament::button>
+                    </x-slot>
 
-                    @if ($isEditing)
-                        <div class="mt-4">
+                    <div class="space-y-5">
+                        <x-filament::section compact>
+                            <x-slot name="heading">Qty Sistem</x-slot>
+                            <div class="text-3xl font-black text-gray-900 dark:text-white">
+                                {{ $scannedItem->qty_sistem_display }}
+                            </div>
+                        </x-filament::section>
+
+                        @if ($isEditing)
                             <x-filament::callout color="info" icon="heroicon-m-pencil-square">
                                 <x-slot name="heading">Mode Edit</x-slot>
                                 <x-slot name="description">Koreksi qty aktual untuk item ini.</x-slot>
                             </x-filament::callout>
-                        </div>
-                    @endif
-
-                    <div class="mt-6">
-                        <label class="mb-3 block text-base font-semibold text-gray-700 dark:text-gray-300">
-                            Qty Aktual
-                        </label>
-                        <div class="grid gap-4 sm:gap-5" style="grid-template-columns: repeat({{ count($qtyLabels) }}, 1fr)">
-                            @foreach ($qtyLabels as $index => $label)
-                                <div class="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
-                                    <label class="mb-2 block text-center text-sm font-medium text-gray-500">
-                                        {{ $label }}
-                                    </label>
-                                    <x-filament::input
-                                        type="number"
-                                        min="0"
-                                        wire:model="qtyLevels.{{ $index }}"
-                                        class="text-center text-2xl font-bold"
-                                    />
-                                </div>
-                            @endforeach
-                        </div>
-                    </div>
-
-                    @if ($isEditing)
-                        <div class="mt-4">
-                            <label class="mb-2 block text-base font-semibold text-gray-700 dark:text-gray-300">
-                                Alasan Koreksi
-                            </label>
-                            <x-filament::input
-                                type="text"
-                                wire:model="editReason"
-                                placeholder="Alasan koreksi (opsional)"
-                                class="text-lg"
-                            />
-                        </div>
-                    @endif
-
-                    <div @class([
-                        'grid grid-cols-1 gap-3 sm:grid-cols-2',
-                        'mt-4' => $isEditing,
-                        'mt-6' => ! $isEditing,
-                    ])>
-                        @if (! $isEditing)
-                            <x-filament::button
-                                wire:click="markComplete"
-                                color="success"
-                                size="xl"
-                                icon="heroicon-m-check"
-                                class="w-full"
-                            >
-                                Lengkap
-                            </x-filament::button>
                         @endif
 
-                        <x-filament::button
-                            wire:click="submitActualQty"
-                            :color="$isEditing ? 'primary' : 'warning'"
-                            size="xl"
-                            :icon="$isEditing ? 'heroicon-m-check' : 'heroicon-m-exclamation-triangle'"
-                            @class([
-                                'w-full',
-                                'col-span-2' => $isEditing,
-                            ])
-                        >
-                            {{ $isEditing ? 'Simpan Koreksi' : 'Catat Selisih' }}
-                        </x-filament::button>
+                        <div>
+                            <label class="mb-3 block text-base font-semibold text-gray-700 dark:text-gray-300">
+                                Qty Aktual
+                            </label>
+                            <div class="grid gap-4 sm:gap-5" style="grid-template-columns: repeat({{ count($qtyLabels) }}, minmax(0, 1fr))">
+                                @foreach ($qtyLabels as $index => $label)
+                                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
+                                        <label class="mb-2 block text-center text-sm font-medium text-gray-500">
+                                            {{ $label }}
+                                        </label>
+                                        <x-filament::input
+                                            type="number"
+                                            min="0"
+                                            wire:model="qtyLevels.{{ $index }}"
+                                            class="text-center text-2xl font-bold"
+                                        />
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        @if ($isEditing)
+                            <div>
+                                <label class="mb-2 block text-base font-semibold text-gray-700 dark:text-gray-300">
+                                    Alasan Koreksi
+                                </label>
+                                <x-filament::input
+                                    type="text"
+                                    wire:model="editReason"
+                                    placeholder="Alasan koreksi (opsional)"
+                                    class="text-lg"
+                                />
+                            </div>
+                        @endif
+
+                        <div @class([
+                            'grid grid-cols-1 gap-3',
+                            'sm:grid-cols-3' => ! $isEditing,
+                            'sm:grid-cols-1' => $isEditing,
+                            'pt-2' => $isEditing,
+                        ])>
+                            @if (! $isEditing)
+                                <x-filament::button
+                                    wire:click="markComplete"
+                                    color="success"
+                                    size="xl"
+                                    icon="heroicon-m-check"
+                                    class="w-full"
+                                >
+                                    Lengkap
+                                </x-filament::button>
+
+                                <x-filament::button
+                                    wire:click="markMissing"
+                                    color="gray"
+                                    size="xl"
+                                    icon="heroicon-m-eye-slash"
+                                    class="w-full"
+                                >
+                                    Tidak Ada
+                                </x-filament::button>
+                            @endif
+
+                            <x-filament::button
+                                wire:click="submitActualQty"
+                                :color="$isEditing ? 'primary' : 'warning'"
+                                size="xl"
+                                :icon="$isEditing ? 'heroicon-m-check' : 'heroicon-m-exclamation-triangle'"
+                                @class([
+                                    'w-full',
+                                    'sm:col-span-full' => $isEditing,
+                                ])
+                            >
+                                {{ $isEditing ? 'Simpan Koreksi' : 'Catat Selisih' }}
+                            </x-filament::button>
+                        </div>
                     </div>
                 </x-filament::section>
             @endif

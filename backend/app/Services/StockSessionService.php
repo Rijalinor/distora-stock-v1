@@ -28,17 +28,21 @@ class StockSessionService
         return DB::transaction(function () use ($upload, $previewResult) {
             $sessions = collect();
 
-            // 1. Get database map for Principals (kode -> id)
-            $principalsMap = Principal::pluck('id', 'kode');
+            // 1. Get database map for Principals (kode -> effective principal id)
+            $principalsMap = Principal::query()
+                ->get(['id', 'kode', 'group_principal_id'])
+                ->mapWithKeys(fn (Principal $principal) => [
+                    $principal->kode => $principal->effectivePrincipalId(),
+                ]);
 
             // 2. Get database map for Item Masters (kode_barang -> id)
             $itemsMap = ItemMaster::pluck('id', 'kode_barang');
 
-            // 3. Group rows by principal kode
-            $rowsByPrincipal = collect($previewResult->rows)->groupBy('principalKode');
+            // 3. Group rows by effective principal id, so merged principals share one session.
+            $rowsByPrincipal = collect($previewResult->rows)
+                ->groupBy(fn ($row) => $principalsMap->get($row->principalKode));
 
-            foreach ($rowsByPrincipal as $principalKode => $rows) {
-                $principalId = $principalsMap->get($principalKode);
+            foreach ($rowsByPrincipal as $principalId => $rows) {
                 if (!$principalId) {
                     continue; // Skip if principal is missing (should not happen after sync)
                 }
@@ -53,6 +57,13 @@ class StockSessionService
                     'checked_items' => 0,
                     'matched_items' => 0,
                     'mismatched_items' => 0,
+                ]);
+
+                app(AuditLogService::class)->log('session_created', $session, [], [
+                    'csv_upload_id' => $upload->id,
+                    'principal_id' => $principalId,
+                    'session_date' => $upload->upload_date?->toDateString(),
+                    'total_items' => $rows->count(),
                 ]);
 
                 // Create Stock Session Items
@@ -87,6 +98,12 @@ class StockSessionService
      */
     public function assignOfficer(StockSession $session, User $officer): void
     {
+        $before = [
+            'assigned_to' => $session->assigned_to,
+            'status' => $session->status?->value,
+            'started_at' => $session->started_at?->toDateTimeString(),
+        ];
+
         $data = [
             'assigned_to' => $officer->id,
         ];
@@ -97,6 +114,12 @@ class StockSessionService
         }
 
         $session->update($data);
+
+        app(AuditLogService::class)->log('session_assigned', $session, $before, [
+            'assigned_to' => $session->assigned_to,
+            'status' => $session->status?->value,
+            'started_at' => $session->started_at?->toDateTimeString(),
+        ]);
     }
 
     /**
@@ -108,9 +131,19 @@ class StockSessionService
      */
     public function completeSession(StockSession $session): void
     {
+        $before = [
+            'status' => $session->status?->value,
+            'completed_at' => $session->completed_at?->toDateTimeString(),
+        ];
+
         $session->update([
             'status' => StockSessionStatus::Completed,
             'completed_at' => now(),
+        ]);
+
+        app(AuditLogService::class)->log('session_completed', $session, $before, [
+            'status' => $session->status?->value,
+            'completed_at' => $session->completed_at?->toDateTimeString(),
         ]);
     }
 
@@ -166,9 +199,20 @@ class StockSessionService
                 ->get();
 
             foreach ($sessions as $session) {
+                $before = [
+                    'status' => $session->status?->value,
+                    'completed_at' => $session->completed_at?->toDateTimeString(),
+                ];
+
                 $session->update([
                     'status' => StockSessionStatus::Completed,
                     'completed_at' => now(),
+                ]);
+
+                app(AuditLogService::class)->log('session_closed_by_day', $session, $before, [
+                    'status' => $session->status?->value,
+                    'completed_at' => $session->completed_at?->toDateTimeString(),
+                    'closed_date' => today()->toDateString(),
                 ]);
             }
 
@@ -190,11 +234,12 @@ class StockSessionService
                 COUNT(*) as total,
                 SUM(CASE WHEN status != ? THEN 1 ELSE 0 END) as checked,
                 SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as matched,
-                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as mismatched
+                SUM(CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END) as mismatched
             ', [
                 StockSessionItemStatus::Pending->value,
                 StockSessionItemStatus::Matched->value,
                 StockSessionItemStatus::Mismatched->value,
+                StockSessionItemStatus::Missing->value,
             ])
             ->first();
 

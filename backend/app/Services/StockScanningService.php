@@ -78,6 +78,13 @@ class StockScanningService
                 'checked_at' => now(),
             ]);
 
+            app(AuditLogService::class)->log('stock_recorded', $item, [], [
+                'qty_aktual_base' => $qtyBase,
+                'qty_aktual_display' => $qtyDisplay,
+                'selisih' => $selisih,
+                'status' => $status->value,
+            ]);
+
             $this->sessionService->recalculateProgress($item->stockSession);
         });
     }
@@ -101,6 +108,39 @@ class StockScanningService
                 'checked_at' => now(),
             ]);
 
+            app(AuditLogService::class)->log('stock_matched', $item, [], [
+                'qty_aktual_base' => $item->qty_sistem_base,
+                'qty_aktual_display' => $item->qty_sistem_display,
+                'selisih' => 0,
+                'status' => StockSessionItemStatus::Matched->value,
+            ]);
+
+            $this->sessionService->recalculateProgress($item->stockSession);
+        });
+    }
+
+    public function markAsMissing(StockSessionItem $item, User $officer): void
+    {
+        DB::transaction(function () use ($item, $officer) {
+            $labels = $this->resolveQtyLabels($item);
+            $selisih = 0 - $item->qty_sistem_base;
+
+            $item->update([
+                'qty_aktual_base' => 0,
+                'qty_aktual_display' => self::buildQtyDisplayFromLabels([], $labels),
+                'selisih' => $selisih,
+                'status' => StockSessionItemStatus::Missing,
+                'checked_by' => $officer->id,
+                'checked_at' => now(),
+            ]);
+
+            app(AuditLogService::class)->log('stock_missing', $item, [], [
+                'qty_aktual_base' => 0,
+                'qty_aktual_display' => self::buildQtyDisplayFromLabels([], $labels),
+                'selisih' => $selisih,
+                'status' => StockSessionItemStatus::Missing->value,
+            ]);
+
             $this->sessionService->recalculateProgress($item->stockSession);
         });
     }
@@ -121,6 +161,14 @@ class StockScanningService
             $labels = $this->resolveQtyLabels($item);
             $qtyAfterBase = self::calculateBaseQuantity($newQtyLevels, $factors);
             $qtyAfterDisplay = self::buildQtyDisplay($newQtyLevels, $labels);
+            $before = [
+                'qty_aktual_base' => $item->qty_aktual_base,
+                'qty_aktual_display' => $item->qty_aktual_display,
+                'selisih' => $item->selisih,
+                'status' => $item->status instanceof StockSessionItemStatus
+                    ? $item->status->value
+                    : $item->status,
+            ];
 
             // Log adjustment
             StockAdjustmentLog::create([
@@ -144,6 +192,14 @@ class StockScanningService
                 'status' => $status,
                 'checked_by' => $officer->id,
                 'checked_at' => now(),
+            ]);
+
+            app(AuditLogService::class)->log('stock_corrected', $item, $before, [
+                'qty_aktual_base' => $qtyAfterBase,
+                'qty_aktual_display' => $qtyAfterDisplay,
+                'selisih' => $selisih,
+                'status' => $status->value,
+                'reason' => $reason,
             ]);
 
             $this->sessionService->recalculateProgress($item->stockSession);

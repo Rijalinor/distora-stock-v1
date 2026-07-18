@@ -43,19 +43,29 @@ class ItemMasterForm
                     ->required(),
                 Repeater::make('qty_structure')
                     ->label('Struktur Qty')
-                    ->helperText('Susun dari level terbesar ke terkecil. Contoh: CTN lalu PCS.')
+                    ->helperText('Pilih satuan dari terbesar ke terkecil. Contoh: CTN faktor 12, lalu PCS faktor 1.')
                     ->default([])
+                    ->minItems(1)
+                    ->addActionLabel('Tambah satuan')
+                    ->reorderable()
                     ->columns(2)
                     ->schema([
-                        TextInput::make('label')
-                            ->label('Label')
+                        Select::make('label')
+                            ->label('Satuan')
+                            ->options([
+                                'CTN' => 'CTN',
+                                'PCK' => 'PCK',
+                                'PCS' => 'PCS',
+                            ])
+                            ->native(false)
                             ->required(),
                         TextInput::make('factor')
-                            ->label('Faktor ke bawah')
+                            ->label('Isi ke satuan terkecil')
                             ->numeric()
                             ->minValue(1)
-                            ->helperText('Contoh: CTN ke PCS = 12')
-                            ->nullable(),
+                            ->default(1)
+                            ->required()
+                            ->helperText('Contoh: CTN isi 12 PCS, maka isi 12. Untuk PCS isi 1.'),
                     ]),
                 Toggle::make('status')
                     ->required(),

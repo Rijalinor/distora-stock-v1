@@ -127,6 +127,8 @@ class StockScanning extends Page
         $item = app(StockScanningService::class)->findByBarcode($session, $this->barcode);
 
         if (! $item) {
+            $this->dispatch('stock-scan-failed');
+
             Notification::make()
                 ->title('Barang tidak ditemukan')
                 ->body('Barcode/kode tidak ada di sesi principal ini.')
@@ -142,6 +144,7 @@ class StockScanning extends Page
         $this->isEditing = $item->status !== StockSessionItemStatus::Pending;
         $this->prepareQtyLevels($item);
         $this->barcode = '';
+        $this->dispatch('stock-item-scanned');
     }
 
     public function markComplete(): void
@@ -160,6 +163,27 @@ class StockScanning extends Page
             ->title('Sesuai')
             ->body($this->scannedItem->nama_barang . ' — qty sesuai sistem.')
             ->success()
+            ->send();
+
+        $this->resetScanState();
+    }
+
+    public function markMissing(): void
+    {
+        if (! $this->ensureScannedItemAccess()) {
+            return;
+        }
+
+        if (! $this->scannedItem) {
+            return;
+        }
+
+        app(StockScanningService::class)->markAsMissing($this->scannedItem, Auth::user());
+
+        Notification::make()
+            ->title('Barang tidak ada')
+            ->body($this->scannedItem->nama_barang . ' ditandai tidak ada fisik.')
+            ->warning()
             ->send();
 
         $this->resetScanState();

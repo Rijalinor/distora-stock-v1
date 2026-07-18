@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\StockSessions\Pages;
 
 use App\Filament\Resources\StockSessions\StockSessionResource;
+use App\Filament\Resources\CsvUploads\CsvUploadResource;
 use App\Services\StockSessionService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -17,6 +18,25 @@ class ListStockSessions extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('todayStatus')
+                ->label('Status Hari Ini')
+                ->icon('heroicon-o-calendar-days')
+                ->color('gray')
+                ->modalHeading('Status stock opname hari ini')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Tutup')
+                ->modalContent(fn () => view('filament.pages.stock-sessions-close-day', [
+                    'summary' => app(StockSessionService::class)->summarizeTodaySessions(),
+                ]))
+                ->visible(fn (): bool => auth()->user()?->isAdmin() ?? false),
+
+            Action::make('openNewDay')
+                ->label('Buka Hari Baru')
+                ->icon('heroicon-o-arrow-up-tray')
+                ->color('success')
+                ->url(CsvUploadResource::getUrl('create'))
+                ->visible(fn (): bool => auth()->user()?->isAdmin() ?? false),
+
             Action::make('closeTodaySessions')
                 ->label('Tutup Semua Sesi Hari Ini')
                 ->icon('heroicon-o-lock-closed')
