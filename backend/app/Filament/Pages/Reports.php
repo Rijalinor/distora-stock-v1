@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\StockSessionItemStatus;
 use App\Filament\Widgets\ReportStatsOverview;
+use App\Models\Principal;
 use App\Models\StockSessionItem;
 use App\Services\ReportService;
 use BackedEnum;
@@ -11,6 +12,7 @@ use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -40,7 +42,9 @@ class Reports extends Page implements HasTable
 
     public string $reportDate = '';
 
-    protected $queryString = ['reportDate'];
+    public ?int $principalId = null;
+
+    protected $queryString = ['reportDate', 'principalId'];
 
     public function mount(): void
     {
@@ -55,7 +59,10 @@ class Reports extends Page implements HasTable
     protected function getHeaderWidgets(): array
     {
         return [
-            ReportStatsOverview::make(['date' => $this->reportDate ?: null]),
+            ReportStatsOverview::make([
+                'date' => $this->reportDate ?: null,
+                'principalId' => $this->principalId,
+            ]),
         ];
     }
 
@@ -64,18 +71,26 @@ class Reports extends Page implements HasTable
         $dateLabel = Carbon::parse($this->reportDate ?: today()->toDateString())->format('d M Y');
 
         return [
-            Action::make('filterDate')
-                ->label("Tanggal: {$dateLabel}")
-                ->icon('heroicon-m-calendar-days')
+            Action::make('filterReport')
+                ->label($this->principalId ? "Filter: {$dateLabel}" : "Tanggal: {$dateLabel}")
+                ->icon('heroicon-m-funnel')
                 ->color('gray')
                 ->form([
                     DatePicker::make('reportDate')
                         ->label('Tanggal Laporan')
                         ->default($this->reportDate ?: today()->toDateString())
                         ->native(false),
+                    Select::make('principalId')
+                        ->label('Principal')
+                        ->options(fn () => Principal::query()->orderBy('nama')->pluck('nama', 'id'))
+                        ->default($this->principalId)
+                        ->searchable()
+                        ->preload()
+                        ->placeholder('Semua principal'),
                 ])
                 ->action(function (array $data): void {
                     $this->reportDate = $data['reportDate'] ?: today()->toDateString();
+                    $this->principalId = filled($data['principalId'] ?? null) ? (int) $data['principalId'] : null;
                 }),
 
             ActionGroup::make([
@@ -97,8 +112,8 @@ class Reports extends Page implements HasTable
 
     public function exportDailyCsv(): StreamedResponse
     {
-        $csv = app(ReportService::class)->buildDailyCsv($this->reportDate);
-        $filename = 'laporan-harian-' . $this->reportDate . '.csv';
+        $csv = app(ReportService::class)->buildDailyCsv($this->reportDate, $this->principalId);
+        $filename = 'laporan-harian-' . $this->reportDate . $this->principalFilenameSuffix() . '.csv';
 
         return response()->streamDownload(
             fn () => print($csv),
@@ -109,8 +124,8 @@ class Reports extends Page implements HasTable
 
     public function exportSelisihCsv(): StreamedResponse
     {
-        $csv = app(ReportService::class)->buildSelisihCsv($this->reportDate);
-        $filename = 'selisih-' . $this->reportDate . '.csv';
+        $csv = app(ReportService::class)->buildSelisihCsv($this->reportDate, $this->principalId);
+        $filename = 'selisih-' . $this->reportDate . $this->principalFilenameSuffix() . '.csv';
 
         return response()->streamDownload(
             fn () => print($csv),
@@ -129,6 +144,10 @@ class Reports extends Page implements HasTable
                     ->when($this->reportDate, fn (Builder $q) => $q->whereHas(
                         'stockSession',
                         fn (Builder $q) => $q->whereDate('session_date', $this->reportDate)
+                    ))
+                    ->when($this->principalId, fn (Builder $q) => $q->whereHas(
+                        'stockSession',
+                        fn (Builder $q) => $q->where('principal_id', $this->principalId)
                     ))
             )
             ->columns([
@@ -175,5 +194,16 @@ class Reports extends Page implements HasTable
                     ->searchable()
                     ->preload(),
             ]);
+    }
+
+    protected function principalFilenameSuffix(): string
+    {
+        if (! $this->principalId) {
+            return '';
+        }
+
+        $principal = Principal::find($this->principalId);
+
+        return $principal ? '-' . str($principal->kode ?: $principal->nama)->slug() : '';
     }
 }

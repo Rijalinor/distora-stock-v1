@@ -10,15 +10,15 @@ class ReportStatsOverview extends BaseWidget
 {
     public ?string $date = null;
 
+    public ?int $principalId = null;
+
     protected static ?int $sort = 1;
 
     protected function getStats(): array
     {
         $date = filled($this->date) ? $this->date : now()->format('Y-m-d');
 
-        $summary = app(ReportService::class)->getDailySummary(
-            $date
-        );
+        $summary = app(ReportService::class)->getDailySummary($date, $this->principalId);
 
         $pct = $summary['total_items'] > 0
             ? round(($summary['checked_items'] / $summary['total_items']) * 100)

@@ -4,3 +4,79 @@
 @source '../../../../app/Filament/Resources/**/*';
 @source '../../../../app/Filament/Widgets/**/*';
 @source '../../../../resources/views/filament/pages/**/*';
+
+@layer base {
+    :root {
+        --distora-ink: 24 24 27;
+        --distora-line: 226 232 240;
+        --distora-panel: 255 255 255;
+        --distora-soft: 248 250 252;
+    }
+
+    .dark {
+        --distora-ink: 244 244 245;
+        --distora-line: 63 63 70;
+        --distora-panel: 24 24 27;
+        --distora-soft: 39 39 42;
+    }
+
+    body.fi-body {
+        background:
+            radial-gradient(circle at top left, rgb(245 158 11 / 0.10), transparent 26rem),
+            linear-gradient(180deg, rgb(var(--distora-soft)), rgb(var(--distora-soft)) 18rem, rgb(255 255 255));
+        color: rgb(var(--distora-ink));
+    }
+
+    .dark body.fi-body {
+        background:
+            radial-gradient(circle at top left, rgb(245 158 11 / 0.12), transparent 24rem),
+            linear-gradient(180deg, rgb(24 24 27), rgb(24 24 27) 18rem, rgb(9 9 11));
+    }
+}
+
+@layer components {
+    .fi-sidebar {
+        border-right: 1px solid rgb(var(--distora-line));
+        background: color-mix(in srgb, rgb(var(--distora-panel)) 92%, transparent);
+        backdrop-filter: blur(14px);
+    }
+
+    .fi-sidebar-item a,
+    .fi-sidebar-group-button {
+        border-radius: 0.625rem;
+    }
+
+    .fi-section,
+    .fi-wi,
+    .fi-ta-ctn {
+        border: 1px solid rgb(var(--distora-line));
+        border-radius: 0.75rem;
+        background: color-mix(in srgb, rgb(var(--distora-panel)) 96%, transparent);
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 16px 40px rgb(15 23 42 / 0.04);
+    }
+
+    .fi-section-header {
+        border-bottom-color: rgb(var(--distora-line));
+    }
+
+    .fi-header-heading {
+        letter-spacing: 0;
+    }
+
+    .fi-btn {
+        border-radius: 0.625rem;
+        box-shadow: none;
+    }
+
+    .fi-input-wrp {
+        border-radius: 0.625rem;
+    }
+
+    .fi-ta-row:hover {
+        background: rgb(245 158 11 / 0.06);
+    }
+
+    .fi-badge {
+        border-radius: 999px;
+    }
+}

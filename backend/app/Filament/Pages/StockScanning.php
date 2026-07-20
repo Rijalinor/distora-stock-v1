@@ -37,12 +37,20 @@ class StockScanning extends Page
 
     public ?StockSessionItem $scannedItem = null;
 
+    public string $lastScannedBarcode = '';
+
+    /** @var array<int, array{id: int, code: string, name: string, system_qty: string, status: string}> */
+    public array $scanCandidates = [];
+
     /** @var array<int, int|string> */
     public array $qtyLevels = [];
 
     public string $editReason = '';
 
     public bool $isEditing = false;
+
+    /** @var array<int, array{name: string, code: string, status: string, at: string}> */
+    public array $recentScans = [];
 
     public function mount(): void
     {
@@ -124,9 +132,9 @@ class StockScanning extends Page
         }
 
         $session = StockSession::findOrFail($this->selectedSessionId);
-        $item = app(StockScanningService::class)->findByBarcode($session, $this->barcode);
+        $items = app(StockScanningService::class)->findItemsByBarcode($session, $this->barcode);
 
-        if (! $item) {
+        if ($items->isEmpty()) {
             $this->dispatch('stock-scan-failed');
 
             Notification::make()
@@ -140,11 +148,63 @@ class StockScanning extends Page
             return;
         }
 
+        if ($items->count() > 1) {
+            $this->lastScannedBarcode = $this->barcode;
+            $this->scanCandidates = $items
+                ->map(fn (StockSessionItem $item): array => [
+                    'id' => $item->id,
+                    'code' => $item->kode_barang,
+                    'name' => $item->nama_barang,
+                    'system_qty' => $item->qty_sistem_display,
+                    'status' => $item->status->value,
+                ])
+                ->values()
+                ->all();
+            $this->barcode = '';
+            $this->dispatch('stock-item-scanned');
+
+            Notification::make()
+                ->title('Barcode dipakai beberapa item')
+                ->body('Pilih kode barang yang sedang dihitung.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $this->openScannedItem($items->first());
+    }
+
+    public function chooseScanCandidate(int $itemId): void
+    {
+        if (! $this->ensureSelectedSessionAccess()) {
+            return;
+        }
+
+        $session = StockSession::findOrFail($this->selectedSessionId);
+        $item = $session->items()->findOrFail($itemId);
+
+        $this->openScannedItem($item);
+    }
+
+    protected function openScannedItem(StockSessionItem $item): void
+    {
         $this->scannedItem = $item;
+        $this->scanCandidates = [];
+        $this->lastScannedBarcode = '';
         $this->isEditing = $item->status !== StockSessionItemStatus::Pending;
         $this->prepareQtyLevels($item);
         $this->barcode = '';
+        $this->rememberScan($item);
         $this->dispatch('stock-item-scanned');
+
+        if ($this->isEditing) {
+            Notification::make()
+                ->title('Barang sudah pernah dicek')
+                ->body("Status terakhir: {$item->status->value}. Anda bisa koreksi qty bila perlu.")
+                ->info()
+                ->send();
+        }
     }
 
     public function markComplete(): void
@@ -236,6 +296,18 @@ class StockScanning extends Page
         $this->scannedItem = $item;
         $this->isEditing = true;
         $this->prepareQtyLevels($item);
+    }
+
+    protected function rememberScan(StockSessionItem $item): void
+    {
+        array_unshift($this->recentScans, [
+            'name' => $item->nama_barang,
+            'code' => $item->kode_barang,
+            'status' => $item->status->value,
+            'at' => now()->format('H:i'),
+        ]);
+
+        $this->recentScans = array_slice($this->recentScans, 0, 5);
     }
 
     public function completeSession(): void
@@ -417,8 +489,11 @@ class StockScanning extends Page
     {
         $this->barcode = '';
         $this->scannedItem = null;
+        $this->lastScannedBarcode = '';
+        $this->scanCandidates = [];
         $this->qtyLevels = [];
         $this->editReason = '';
         $this->isEditing = false;
+        $this->dispatch('stock-scan-ready');
     }
 }

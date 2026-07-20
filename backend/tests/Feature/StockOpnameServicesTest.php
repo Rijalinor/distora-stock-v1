@@ -13,9 +13,11 @@ use App\Models\StockSession;
 use App\Models\StockSessionItem;
 use App\Models\User;
 use App\Services\CsvImportService;
+use App\Services\ItemMasterBackupService;
 use App\Services\StockScanningService;
 use App\Services\StockSessionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class StockOpnameServicesTest extends TestCase
@@ -210,5 +212,125 @@ class StockOpnameServicesTest extends TestCase
         // 8. Complete session
         $sessionService->completeSession($johnsonSession);
         $this->assertEquals(StockSessionStatus::Completed, $johnsonSession->fresh()->status);
+    }
+
+    /** @test */
+    public function it_can_backup_item_master_barcode_and_size_data()
+    {
+        $principal = Principal::create([
+            'kode' => 'P001',
+            'nama' => 'Principal Test',
+            'status' => true,
+        ]);
+
+        ItemMaster::create([
+            'kode_barang' => 'ITEM001',
+            'barcode' => '8991234567890',
+            'nama_barang' => 'Barang Test',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCS',
+            'qty_structure' => [
+                ['label' => 'CTN', 'factor' => 12],
+                ['label' => 'PCS', 'factor' => 1],
+            ],
+            'status' => true,
+        ]);
+
+        $csv = app(ItemMasterBackupService::class)->buildCsv();
+
+        $this->assertStringContainsString('8991234567890', $csv);
+        $this->assertStringContainsString('ITEM001', $csv);
+        $this->assertStringContainsString('CTN-PCS', $csv);
+        $this->assertStringContainsString('qty_structure_json', $csv);
+        $this->assertStringContainsString('12', $csv);
+    }
+
+    /** @test */
+    public function it_can_restore_item_master_backup_csv()
+    {
+        $csv = implode("\n", [
+            '"principal_kode","principal_nama","kode_barang","barcode","nama_barang","satuan","qty_labels","qty_factors","qty_structure_json","status","updated_at"',
+            '"P002","Principal Restore","ITEM002","8990002","Barang Restore","CTN-PCS","CTN-PCS","24","[{""label"":""CTN"",""factor"":24},{""label"":""PCS"",""factor"":1}]","active","2026-07-20 10:00:00"',
+            '',
+        ]);
+
+        $file = UploadedFile::fake()->createWithContent('backup-item-master.csv', $csv);
+        $stats = app(ItemMasterBackupService::class)->restoreCsv($file);
+
+        $this->assertEquals(['created' => 1, 'updated' => 0, 'skipped' => 0], $stats);
+        $this->assertDatabaseHas('principals', ['kode' => 'P002', 'nama' => 'Principal Restore']);
+        $this->assertDatabaseHas('item_masters', [
+            'kode_barang' => 'ITEM002',
+            'barcode' => '8990002',
+            'nama_barang' => 'Barang Restore',
+            'satuan' => 'CTN-PCS',
+        ]);
+
+        $item = ItemMaster::where('kode_barang', 'ITEM002')->first();
+
+        $this->assertEquals(['CTN', 'PCS'], $item->getQtyLabelsArray());
+        $this->assertEquals([24], $item->getQtyFactorsArray());
+    }
+
+    /** @test */
+    public function it_returns_multiple_session_items_for_duplicate_barcode()
+    {
+        $principal = Principal::create([
+            'kode' => 'P003',
+            'nama' => 'Principal Duplicate',
+            'status' => true,
+        ]);
+
+        $first = ItemMaster::create([
+            'kode_barang' => 'ITEM-A',
+            'barcode' => '899DUP',
+            'nama_barang' => 'Barang A',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCS',
+            'status' => true,
+        ]);
+
+        $second = ItemMaster::create([
+            'kode_barang' => 'ITEM-B',
+            'barcode' => '899DUP',
+            'nama_barang' => 'Barang B',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCS',
+            'status' => true,
+        ]);
+
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::Open,
+            'total_items' => 2,
+        ]);
+
+        StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'item_master_id' => $first->id,
+            'kode_barang' => 'ITEM-A',
+            'nama_barang' => 'Barang A',
+            'satuan' => 'CTN-PCS',
+            'qty_sistem_display' => '1 PCS',
+            'qty_sistem_base' => 1,
+            'status' => StockSessionItemStatus::Pending,
+        ]);
+
+        StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'item_master_id' => $second->id,
+            'kode_barang' => 'ITEM-B',
+            'nama_barang' => 'Barang B',
+            'satuan' => 'CTN-PCS',
+            'qty_sistem_display' => '2 PCS',
+            'qty_sistem_base' => 2,
+            'status' => StockSessionItemStatus::Pending,
+        ]);
+
+        $items = app(StockScanningService::class)->findItemsByBarcode($session, '899DUP');
+
+        $this->assertCount(2, $items);
+        $this->assertEquals(['ITEM-A', 'ITEM-B'], $items->pluck('kode_barang')->all());
     }
 }

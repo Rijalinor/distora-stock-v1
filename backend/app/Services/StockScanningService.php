@@ -8,6 +8,7 @@ use App\Models\StockAdjustmentLog;
 use App\Models\StockSession;
 use App\Models\StockSessionItem;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class StockScanningService
@@ -28,26 +29,42 @@ class StockScanningService
      */
     public function findByBarcode(StockSession $session, string $barcode): ?StockSessionItem
     {
+        return $this->findItemsByBarcode($session, $barcode)->first();
+    }
+
+    /**
+     * @return Collection<int, StockSessionItem>
+     */
+    public function findItemsByBarcode(StockSession $session, string $barcode): Collection
+    {
         $barcode = trim($barcode);
         if ($barcode === '') {
-            return null;
+            return collect();
         }
 
-        // Try to match barcode in item_masters first
-        $itemMaster = ItemMaster::where('barcode', $barcode)
+        $itemMasterIds = ItemMaster::query()
+            ->where('barcode', $barcode)
             ->orWhere('kode_barang', $barcode)
-            ->first();
+            ->pluck('id');
 
-        if ($itemMaster) {
-            return StockSessionItem::where('stock_session_id', $session->id)
-                ->where('item_master_id', $itemMaster->id)
-                ->first();
+        if ($itemMasterIds->isNotEmpty()) {
+            $items = StockSessionItem::query()
+                ->where('stock_session_id', $session->id)
+                ->whereIn('item_master_id', $itemMasterIds)
+                ->with('itemMaster')
+                ->orderBy('kode_barang')
+                ->get();
+
+            if ($items->isNotEmpty()) {
+                return $items;
+            }
         }
 
-        // Fallback: match by kode_barang directly in session items
-        return StockSessionItem::where('stock_session_id', $session->id)
+        return StockSessionItem::query()
+            ->where('stock_session_id', $session->id)
             ->where('kode_barang', $barcode)
-            ->first();
+            ->with('itemMaster')
+            ->get();
     }
 
     /**

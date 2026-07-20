@@ -35,7 +35,7 @@ class ReportService
     /**
      * Get all mismatched items across all sessions, optionally filtered by date.
      */
-    public function getAllSelisihItems(?string $date = null): Collection
+    public function getAllSelisihItems(?string $date = null, ?int $principalId = null): Collection
     {
         $query = StockSessionItem::query()
             ->whereIn('status', [StockSessionItemStatus::Mismatched, StockSessionItemStatus::Missing])
@@ -43,6 +43,10 @@ class ReportService
 
         if ($date) {
             $query->whereHas('stockSession', fn ($q) => $q->whereDate('session_date', $date));
+        }
+
+        if ($principalId) {
+            $query->whereHas('stockSession', fn ($q) => $q->where('principal_id', $principalId));
         }
 
         return $query->orderBy('created_at', 'desc')->get();
@@ -53,9 +57,13 @@ class ReportService
      *
      * @return array{sessions: int, total_items: int, checked_items: int, matched_items: int, mismatched_items: int}
      */
-    public function getDailySummary(string $date): array
+    public function getDailySummary(string $date, ?int $principalId = null): array
     {
         $sessions = StockSession::whereDate('session_date', $date);
+
+        if ($principalId) {
+            $sessions->where('principal_id', $principalId);
+        }
 
         $summary = (clone $sessions)
             ->select([
@@ -79,7 +87,7 @@ class ReportService
     /**
      * Get detailed item rows across all stock sessions for a specific date.
      */
-    public function getDailyDetailReport(string $date): Collection
+    public function getDailyDetailReport(string $date, ?int $principalId = null): Collection
     {
         return StockSessionItem::query()
             ->with([
@@ -89,6 +97,10 @@ class ReportService
                 'checkedBy',
             ])
             ->whereHas('stockSession', fn ($q) => $q->whereDate('session_date', $date))
+            ->when($principalId, fn ($q) => $q->whereHas(
+                'stockSession',
+                fn ($q) => $q->where('principal_id', $principalId)
+            ))
             ->orderBy('created_at')
             ->get();
     }
@@ -137,9 +149,9 @@ class ReportService
     /**
      * Build CSV content for all selisih items.
      */
-    public function buildSelisihCsv(?string $date = null): string
+    public function buildSelisihCsv(?string $date = null, ?int $principalId = null): string
     {
-        $items = $this->getAllSelisihItems($date);
+        $items = $this->getAllSelisihItems($date, $principalId);
 
         $lines = [];
         $lines[] = implode(',', [
@@ -178,9 +190,9 @@ class ReportService
     /**
      * Build CSV content for a daily report (item details per principal).
      */
-    public function buildDailyCsv(string $date): string
+    public function buildDailyCsv(string $date, ?int $principalId = null): string
     {
-        $items = $this->getDailyDetailReport($date);
+        $items = $this->getDailyDetailReport($date, $principalId);
 
         $lines = [];
         $lines[] = implode(',', [
