@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\StockSessions\RelationManagers;
 
 use App\Enums\StockSessionItemStatus;
+use App\Models\StockSessionItem;
+use App\Services\ReportService;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -36,7 +38,7 @@ class ItemsRelationManager extends RelationManager
 
                 TextColumn::make('selisih')
                     ->label('Selisih')
-                    ->numeric()
+                    ->formatStateUsing(fn ($state, StockSessionItem $record) => app(ReportService::class)->formatBaseQty($state, $record))
                     ->placeholder('-')
                     ->color(fn ($state) => match (true) {
                         $state === null => 'gray',

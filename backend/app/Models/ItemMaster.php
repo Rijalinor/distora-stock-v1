@@ -54,6 +54,11 @@ class ItemMaster extends Model
         return $this->hasMany(StockSessionItem::class);
     }
 
+    public function itemsWithSameBarcode()
+    {
+        return $this->hasMany(self::class, 'barcode', 'barcode');
+    }
+
     /**
      * @return array<int, string>
      */

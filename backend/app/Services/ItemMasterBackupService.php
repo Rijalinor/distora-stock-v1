@@ -34,10 +34,10 @@ class ItemMasterBackupService
             ->chunk(500, function ($items) use (&$lines): void {
                 foreach ($items as $item) {
                     $lines[] = $this->row([
-                        $item->principal?->kode ?? '',
+                        $this->excelText($item->principal?->kode ?? ''),
                         $item->principal?->nama ?? '',
-                        $item->kode_barang,
-                        $item->barcode,
+                        $this->excelText($item->kode_barang),
+                        $this->excelText($item->barcode),
                         $item->nama_barang,
                         $item->satuan,
                         implode('-', $item->getQtyLabelsArray()),
@@ -85,6 +85,8 @@ class ItemMasterBackupService
             while (($values = fgetcsv($handle)) !== false) {
                 $row = array_combine($headers, array_slice(array_pad($values, count($headers), ''), 0, count($headers)));
 
+                $row = array_map(fn ($value) => $this->restoreCellValue((string) $value), $row ?: []);
+
                 if (! $row || blank($row['kode_barang'] ?? null) || blank($row['principal_kode'] ?? null)) {
                     $stats['skipped']++;
                     continue;
@@ -129,6 +131,26 @@ class ItemMasterBackupService
             fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
             $values
         ));
+    }
+
+    protected function excelText(?string $value): string
+    {
+        if (blank($value)) {
+            return '';
+        }
+
+        return '="' . str_replace('"', '""', (string) $value) . '"';
+    }
+
+    protected function restoreCellValue(string $value): string
+    {
+        $value = trim($value);
+
+        if (preg_match('/^="(.*)"$/s', $value, $matches)) {
+            return str_replace('""', '"', $matches[1]);
+        }
+
+        return $value;
     }
 
     protected function restoreQtyStructure(array $row): ?array

@@ -49,6 +49,8 @@ class StockScanning extends Page
 
     public bool $isEditing = false;
 
+    public string $pendingSearch = '';
+
     /** @var array<int, array{name: string, code: string, status: string, at: string}> */
     public array $recentScans = [];
 
@@ -249,6 +251,26 @@ class StockScanning extends Page
         $this->resetScanState();
     }
 
+    public function markItemMissing(int $itemId): void
+    {
+        if (! $this->ensureSelectedSessionAccess()) {
+            return;
+        }
+
+        $session = StockSession::findOrFail($this->selectedSessionId);
+        $item = $session->items()->findOrFail($itemId);
+
+        app(StockScanningService::class)->markAsMissing($item, Auth::user());
+
+        Notification::make()
+            ->title('Barang tidak ada')
+            ->body($item->nama_barang . ' ditandai tidak ada fisik.')
+            ->warning()
+            ->send();
+
+        $this->resetScanState();
+    }
+
     public function submitActualQty(): void
     {
         if (! $this->ensureScannedItemAccess()) {
@@ -294,7 +316,7 @@ class StockScanning extends Page
         $item = $session->items()->findOrFail($itemId);
 
         $this->scannedItem = $item;
-        $this->isEditing = true;
+        $this->isEditing = $item->status !== StockSessionItemStatus::Pending;
         $this->prepareQtyLevels($item);
     }
 
@@ -494,6 +516,7 @@ class StockScanning extends Page
         $this->qtyLevels = [];
         $this->editReason = '';
         $this->isEditing = false;
+        $this->pendingSearch = '';
         $this->dispatch('stock-scan-ready');
     }
 }

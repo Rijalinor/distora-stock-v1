@@ -31,4 +31,5 @@ taskkill /FI "WINDOWTITLE eq Distora MySQL*" /T /F >nul 2>nul
 
 echo.
 echo Distora dihentikan.
-pause
+timeout /t 2 /nobreak >nul
+exit /b 0

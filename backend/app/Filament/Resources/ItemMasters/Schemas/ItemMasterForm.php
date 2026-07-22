@@ -4,12 +4,14 @@ namespace App\Filament\Resources\ItemMasters\Schemas;
 
 use Filament\Actions\Action;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\ViewField;
-use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Select;
-use Filament\Support\Icons\Heroicon;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\ViewField;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 
 class ItemMasterForm
 {
@@ -58,12 +60,19 @@ class ItemMasterForm
                                 'PCS' => 'PCS',
                             ])
                             ->native(false)
+                            ->live()
+                            ->afterStateUpdated(function (?string $state, Set $set): void {
+                                if ($state === 'PCS') {
+                                    $set('factor', 1);
+                                }
+                            })
                             ->required(),
                         TextInput::make('factor')
                             ->label('Isi ke satuan terkecil')
                             ->numeric()
                             ->minValue(1)
-                            ->default(1)
+                            ->default(fn (Get $get): int => $get('label') === 'PCS' ? 1 : 1)
+                            ->formatStateUsing(fn ($state, Get $get): int => $get('label') === 'PCS' ? 1 : max(1, (int) ($state ?: 1)))
                             ->required()
                             ->helperText('Contoh: CTN isi 12 PCS, maka isi 12. Untuk PCS isi 1.'),
                     ]),

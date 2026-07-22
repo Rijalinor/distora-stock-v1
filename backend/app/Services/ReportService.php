@@ -10,6 +10,21 @@ use Illuminate\Support\Facades\DB;
 
 class ReportService
 {
+    public function formatBaseQty(?int $baseQty, StockSessionItem $item): string
+    {
+        if ($baseQty === null) {
+            return '-';
+        }
+
+        $labels = $item->itemMaster?->getQtyLabelsArray() ?: $this->labelsFromSatuan($item->satuan);
+        $factors = $item->itemMaster?->getQtyFactorsArray() ?: \App\Services\StockScanningService::parseConversionFactors($item->nama_barang);
+        $levels = \App\Services\StockScanningService::splitBaseQuantity(abs($baseQty), $factors);
+        $labels = $this->normalizeLabels($labels, count($levels));
+        $display = \App\Services\StockScanningService::buildQtyDisplayFromLabels($levels, $labels);
+
+        return $baseQty < 0 ? '-' . $display : $display;
+    }
+
     /**
      * Get detailed items list for a specific stock session.
      */
@@ -131,11 +146,11 @@ class ReportService
                 fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
                 [
                     $session->principal->nama,
-                    $item->kode_barang,
+                    $this->excelText($item->kode_barang),
                     $item->nama_barang,
                     $item->qty_sistem_display,
                     $item->qty_aktual_display ?? '-',
-                    $item->selisih ?? '-',
+                    $this->formatBaseQty($item->selisih, $item),
                     $item->status->value,
                     $item->checkedBy?->name ?? '-',
                     $session->session_date->format('Y-m-d'),
@@ -173,11 +188,11 @@ class ReportService
                 [
                     $session?->session_date?->format('Y-m-d') ?? '-',
                     $session?->principal?->nama ?? '-',
-                    $item->kode_barang,
+                    $this->excelText($item->kode_barang),
                     $item->nama_barang,
                     $item->qty_sistem_display,
                     $item->qty_aktual_display ?? '-',
-                    $item->selisih ?? '-',
+                    $this->formatBaseQty($item->selisih, $item),
                     $item->checkedBy?->name ?? '-',
                     $item->checked_at?->format('Y-m-d H:i') ?? '-',
                 ]
@@ -206,9 +221,7 @@ class ReportService
             'Status',
             'Qty Sistem',
             'Qty Aktual',
-            'Plus',
             'Selisih',
-            'Minus',
             'Petugas',
             'Jam Mulai',
             'Jam Check',
@@ -216,11 +229,6 @@ class ReportService
 
         foreach ($items as $item) {
             $session = $item->stockSession;
-            $qtySystem = $item->qty_sistem_base ?? 0;
-            $qtyActual = $item->qty_aktual_base;
-            $selisih = $item->selisih;
-            $plus = $selisih !== null && $selisih > 0 ? $selisih : 0;
-            $minus = $selisih !== null && $selisih < 0 ? abs($selisih) : 0;
 
             $lines[] = implode(',', array_map(
                 fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
@@ -228,16 +236,14 @@ class ReportService
                     $session?->session_date?->format('Y-m-d') ?? '-',
                     $session?->principal?->kode ?? '-',
                     $session?->principal?->nama ?? '-',
-                    $item->kode_barang,
-                    $item->itemMaster?->barcode ?? '-',
+                    $this->excelText($item->kode_barang),
+                    $this->excelText($item->itemMaster?->barcode ?? '-'),
                     $item->nama_barang,
                     $item->satuan ?? '-',
                     $item->status->value,
-                    $qtySystem,
-                    $qtyActual ?? '-',
-                    $plus,
-                    $selisih ?? '-',
-                    $minus,
+                    $this->formatBaseQty($item->qty_sistem_base ?? 0, $item),
+                    $this->formatBaseQty($item->qty_aktual_base, $item),
+                    $this->formatBaseQty($item->selisih, $item),
                     $item->checkedBy?->name ?? '-',
                     $session?->started_at?->format('H:i') ?? '-',
                     $item->checked_at?->format('H:i') ?? '-',
@@ -246,5 +252,32 @@ class ReportService
         }
 
         return implode("\n", $lines);
+    }
+
+    protected function excelText(?string $value): string
+    {
+        if (blank($value) || $value === '-') {
+            return '-';
+        }
+
+        return '="' . str_replace('"', '""', (string) $value) . '"';
+    }
+
+    protected function labelsFromSatuan(?string $satuan): array
+    {
+        return $satuan
+            ? array_values(array_filter(array_map('trim', explode('-', $satuan))))
+            : [];
+    }
+
+    protected function normalizeLabels(array $labels, int $count): array
+    {
+        $labels = array_slice($labels ?: ['PCS'], 0, $count);
+
+        while (count($labels) < $count) {
+            $labels[] = count($labels) === $count - 1 ? 'PCS' : 'LEVEL ' . (count($labels) + 1);
+        }
+
+        return $labels;
     }
 }

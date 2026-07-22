@@ -14,6 +14,7 @@ use App\Models\StockSessionItem;
 use App\Models\User;
 use App\Services\CsvImportService;
 use App\Services\ItemMasterBackupService;
+use App\Services\ReportService;
 use App\Services\StockScanningService;
 use App\Services\StockSessionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -238,8 +239,8 @@ class StockOpnameServicesTest extends TestCase
 
         $csv = app(ItemMasterBackupService::class)->buildCsv();
 
-        $this->assertStringContainsString('8991234567890', $csv);
-        $this->assertStringContainsString('ITEM001', $csv);
+        $this->assertStringContainsString('"=""8991234567890"""', $csv);
+        $this->assertStringContainsString('"=""ITEM001"""', $csv);
         $this->assertStringContainsString('CTN-PCS', $csv);
         $this->assertStringContainsString('qty_structure_json', $csv);
         $this->assertStringContainsString('12', $csv);
@@ -250,7 +251,7 @@ class StockOpnameServicesTest extends TestCase
     {
         $csv = implode("\n", [
             '"principal_kode","principal_nama","kode_barang","barcode","nama_barang","satuan","qty_labels","qty_factors","qty_structure_json","status","updated_at"',
-            '"P002","Principal Restore","ITEM002","8990002","Barang Restore","CTN-PCS","CTN-PCS","24","[{""label"":""CTN"",""factor"":24},{""label"":""PCS"",""factor"":1}]","active","2026-07-20 10:00:00"',
+            '"=""P002""","Principal Restore","=""ITEM002""","=""8990002""","Barang Restore","CTN-PCS","CTN-PCS","24","[{""label"":""CTN"",""factor"":24},{""label"":""PCS"",""factor"":1}]","active","2026-07-20 10:00:00"',
             '',
         ]);
 
@@ -332,5 +333,67 @@ class StockOpnameServicesTest extends TestCase
 
         $this->assertCount(2, $items);
         $this->assertEquals(['ITEM-A', 'ITEM-B'], $items->pluck('kode_barang')->all());
+    }
+
+    /** @test */
+    public function it_exports_daily_report_quantities_as_display_units()
+    {
+        $principal = Principal::create([
+            'kode' => 'P004',
+            'nama' => 'Principal Report',
+            'status' => true,
+        ]);
+
+        $itemMaster = ItemMaster::create([
+            'kode_barang' => 'ITEM-R',
+            'barcode' => '899R',
+            'nama_barang' => 'Barang Report',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCK-PCS',
+            'qty_structure' => [
+                ['label' => 'CTN', 'factor' => 12],
+                ['label' => 'PCK', 'factor' => 30],
+                ['label' => 'PCS', 'factor' => 1],
+            ],
+            'status' => true,
+        ]);
+
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'session_date' => '2026-07-22',
+            'status' => StockSessionStatus::InProgress,
+            'total_items' => 1,
+        ]);
+
+        StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'item_master_id' => $itemMaster->id,
+            'kode_barang' => 'ITEM-R',
+            'nama_barang' => 'Barang Report',
+            'satuan' => 'CTN-PCK-PCS',
+            'qty_sistem_display' => '1 CTN 3 PCK',
+            'qty_sistem_base' => 450,
+            'qty_aktual_display' => '1 CTN 2 PCK 15 PCS',
+            'qty_aktual_base' => 435,
+            'selisih' => -15,
+            'status' => StockSessionItemStatus::Mismatched,
+        ]);
+
+        $csv = app(ReportService::class)->buildDailyCsv('2026-07-22');
+
+        $this->assertStringNotContainsString('Plus', $csv);
+        $this->assertStringNotContainsString('Minus', $csv);
+        $this->assertStringContainsString('"=""899R"""', $csv);
+        $this->assertStringContainsString('1 CTN 3 PCK', $csv);
+        $this->assertStringContainsString('1 CTN 2 PCK 15 PCS', $csv);
+        $this->assertStringContainsString('-15 PCS', $csv);
+
+        $sessionCsv = app(ReportService::class)->buildSessionCsv($session);
+        $selisihCsv = app(ReportService::class)->buildSelisihCsv('2026-07-22');
+
+        $this->assertStringContainsString('"=""ITEM-R"""', $sessionCsv);
+        $this->assertStringContainsString('-15 PCS', $sessionCsv);
+        $this->assertStringContainsString('"=""ITEM-R"""', $selisihCsv);
+        $this->assertStringContainsString('-15 PCS', $selisihCsv);
     }
 }

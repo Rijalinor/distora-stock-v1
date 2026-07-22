@@ -367,9 +367,15 @@
 
                 <div class="mt-3 flex items-center justify-between text-sm text-gray-500">
                     <span>Progress {{ $pct }}%</span>
-                    <button type="button" wire:click="backToSessionList" class="font-semibold text-primary-600 hover:underline dark:text-primary-400">
+                    <x-filament::button
+                        type="button"
+                        wire:click="backToSessionList"
+                        color="gray"
+                        size="sm"
+                        icon="heroicon-m-arrow-left"
+                    >
                         Ganti Principal
-                    </button>
+                    </x-filament::button>
                 </div>
             </x-filament::section>
 
@@ -393,6 +399,7 @@
                                 class="flex w-full items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-danger-400 hover:bg-danger-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-danger-500 dark:hover:bg-danger-950/10"
                             >
                                 <div class="min-w-0 flex-1">
+                                    <div class="font-mono text-xs font-semibold text-danger-600 dark:text-danger-400">{{ $item->kode_barang }}</div>
                                     <div class="break-words text-base font-semibold text-gray-900 dark:text-white sm:text-lg">{{ $item->nama_barang }}</div>
                                     <div class="text-sm text-gray-500">Sistem: {{ $item->qty_sistem_display }}</div>
                                 </div>
@@ -408,6 +415,10 @@
 
             @php
                 $pendingItems = $session->items->where('status', \App\Enums\StockSessionItemStatus::Pending);
+                $pendingSearch = trim($pendingSearch ?? '');
+                $filteredPendingItems = $pendingSearch === ''
+                    ? $pendingItems
+                    : $pendingItems->filter(fn ($item) => str_contains(strtolower($item->kode_barang . ' ' . $item->nama_barang), strtolower($pendingSearch)));
             @endphp
             @if ($pendingItems->isNotEmpty())
                 <x-filament::section>
@@ -418,18 +429,58 @@
                         </span>
                     </x-slot>
 
-                    <div class="grid gap-2">
-                        @foreach ($pendingItems->take(15) as $item)
-                            <div class="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                                <x-filament::icon icon="heroicon-m-cube" class="h-5 w-5 shrink-0 text-gray-400" />
-                                <span class="min-w-0 flex-1 break-words text-base text-gray-600 dark:text-gray-300">{{ $item->nama_barang }}</span>
-                            </div>
-                        @endforeach
+                    <div class="mb-3">
+                        <x-filament::input
+                            type="search"
+                            wire:model.live.debounce.300ms="pendingSearch"
+                            placeholder="Cari kode atau nama barang..."
+                        />
                     </div>
 
-                    @if ($pendingItems->count() > 15)
+                    <div class="grid gap-2">
+                        @forelse ($filteredPendingItems->take(25) as $item)
+                            <div class="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                                <x-filament::icon icon="heroicon-m-cube" class="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+                                <button
+                                    type="button"
+                                    wire:click="startEditItem({{ $item->id }})"
+                                    class="min-w-0 flex-1 text-left"
+                                >
+                                    <span class="block font-mono text-xs font-semibold text-primary-600 dark:text-primary-400">{{ $item->kode_barang }}</span>
+                                    <span class="block break-words text-base text-gray-700 dark:text-gray-200">{{ $item->nama_barang }}</span>
+                                    <span class="block text-sm text-gray-500">Sistem: {{ $item->qty_sistem_display }}</span>
+                                </button>
+                                <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
+                                    <x-filament::button
+                                        type="button"
+                                        size="sm"
+                                        color="primary"
+                                        wire:click="startEditItem({{ $item->id }})"
+                                    >
+                                        Edit
+                                    </x-filament::button>
+                                    <x-filament::button
+                                        type="button"
+                                        size="sm"
+                                        color="gray"
+                                        icon="heroicon-m-eye-slash"
+                                        x-data
+                                        x-on:click.prevent="if (confirm('Tandai item ini tidak ada fisik?')) { $wire.markItemMissing({{ $item->id }}) }"
+                                    >
+                                        Tidak Ada
+                                    </x-filament::button>
+                                </div>
+                            </div>
+                        @empty
+                            <div class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700">
+                                Tidak ada item yang cocok.
+                            </div>
+                        @endforelse
+                    </div>
+
+                    @if ($filteredPendingItems->count() > 25)
                         <div class="mt-3 text-center text-sm text-gray-400">
-                            + {{ $pendingItems->count() - 15 }} item lainnya
+                            + {{ $filteredPendingItems->count() - 25 }} item lainnya
                         </div>
                     @endif
                 </x-filament::section>
@@ -471,6 +522,17 @@
                     </x-slot>
 
                     <div class="space-y-5">
+                        <div>
+                            <x-filament::button
+                                type="button"
+                                wire:click="resetScanState"
+                                color="gray"
+                                icon="heroicon-m-arrow-left"
+                            >
+                                Kembali
+                            </x-filament::button>
+                        </div>
+
                         <x-filament::section compact>
                             <x-slot name="heading">Qty Sistem</x-slot>
                             <div class="text-3xl font-black text-gray-900 dark:text-white">
