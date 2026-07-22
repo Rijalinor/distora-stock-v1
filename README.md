@@ -1,168 +1,127 @@
 # Distora Stock
 
-Sistem **stock opname** untuk distributor berbasis **Laravel 12** dan **Filament 5.6**.
+Distora Stock adalah aplikasi stock opname untuk distributor. Aplikasi ini
+dipakai untuk upload stok harian, membuat sesi opname per principal, membantu
+petugas scan barang, mencatat qty aktual, menghitung selisih, dan membuat
+laporan.
 
-Fokus utama aplikasi ini:
-- import data stok dari CSV
-- buat sesi stock opname per principal
-- scan barcode / kode barang
-- input qty aktual bertingkat
-- hitung selisih otomatis
-- tutup sesi harian
-- export laporan harian dan laporan selisih
+## Ringkasan Stack
 
-## Ringkasan
-
-- **Backend:** Laravel 12
-- **Admin Panel:** Filament 5.6
-- **UI:** Server-rendered, Tailwind CSS 4
-- **Database:** SQLite untuk development, MySQL untuk production
-- **Testing:** PHPUnit 11
-- **Arsitektur:** Monolith dengan service layer
+| Komponen | Teknologi |
+|---|---|
+| Backend | Laravel 12 |
+| Admin panel | Filament 5.6, Livewire |
+| UI | Server-rendered, Tailwind CSS 4 |
+| Database | SQLite untuk development, MySQL untuk produksi |
+| Testing | PHPUnit 11 |
+| Arsitektur | Monolith dengan service layer |
 
 ## Fitur Utama
 
 ### Master Data
-- Principal CRUD
-- Item Master CRUD
-- User management untuk admin
-- Upload dan preview CSV stok
 
-### Stock Opname
-- Generate sesi per principal
-- Scan barcode atau kode barang
-- Input qty aktual multi-level
-- Perhitungan qty dasar otomatis
-- Status item: pending, matched, mismatched
-- Koreksi item dengan log adjustment
-- Progress sesi realtime
-- Selesai sesi dengan konfirmasi
+- Principal CRUD.
+- Item Master CRUD.
+- User management untuk admin.
+- Backup dan restore Item Master.
+- Deteksi barcode duplikat di Item Master.
+- Scanner barcode di form Item Master.
+
+### Upload Stok Harian
+
+- Upload CSV stok.
+- Preview hasil parsing.
+- Sync principal dan item master dari CSV.
+- Generate sesi stock opname per principal.
+
+### Scan Barcode
+
+- Petugas memilih sesi principal hari ini.
+- Scan dari kamera atau input manual barcode/kode barang.
+- Barcode dicari hanya pada item yang ada di sesi aktif.
+- Jika barcode dipakai beberapa item dalam sesi yang sama, petugas memilih kode barang yang benar.
+- Daftar item belum dicek bisa dicari berdasarkan kode atau nama barang.
+- Item belum dicek bisa langsung diedit atau ditandai "Tidak Ada".
+- Item selisih bisa dikoreksi cepat.
+- Qty aktual mendukung multi-level seperti `CTN-PCK-PCS`.
+- Progress sesi dihitung otomatis.
 
 ### Laporan
-- Ringkasan harian
-- Daftar sesi stock opname
-- Daftar item selisih
-- Export CSV laporan harian
-- Export CSV item selisih
 
-### Mobile / Future
-- Folder `mobile/` disiapkan untuk aplikasi Flutter
-- Saat ini mobile app belum menjadi satu produk penuh
-- Rencana berikutnya: scan barcode via kamera pada aplikasi mobile
+- Ringkasan harian: sesi, total item, tercek, sesuai, selisih.
+- Tabel item selisih.
+- Filter tanggal dan principal.
+- Export Laporan Harian.
+- Export Data Selisih.
+- Export detail Sesi Stock.
+- Selisih ditampilkan dalam satuan manusia, bukan base mentah, misalnya `-5 PCS` atau `1 CTN 2 PCK 15 PCS`.
+- CSV export dibuat Excel-safe untuk kode dan barcode panjang.
 
 ## Alur Operasional
 
-1. Admin upload CSV stok.
-2. Sistem membaca data principal dan item.
+1. Admin upload CSV stok harian.
+2. Sistem sync principal dan item master.
 3. Sistem membuat sesi stock opname per principal.
-4. Petugas memilih sesi yang aktif.
-5. Petugas scan barcode atau input kode barang.
-6. Petugas isi qty aktual.
-7. Sistem hitung selisih otomatis.
-8. Admin menutup sesi harian setelah semua prinsipalnya dicek.
-9. Admin download laporan harian dan laporan selisih.
+4. Petugas membuka menu **Scan Barcode**.
+5. Petugas memilih principal/sesi.
+6. Petugas scan barcode atau pilih item dari daftar belum dicek.
+7. Petugas mencatat qty aktual, menandai lengkap, atau menandai tidak ada.
+8. Admin review item selisih dan laporan.
+9. Admin download laporan harian atau data selisih.
 
 ## Struktur Qty
 
-Proyek ini menyimpan qty dalam bentuk:
-- `*_base` = satuan dasar / PCS
-- `*_display` = tampilan manusia, misalnya `1 CTN 12 PCS`
+Database menyimpan dua bentuk qty:
 
-Contoh:
-- `CTN = 12 PCS`
-- `PCS = 1 PCS`
-- qty aktual bisa dipecah menjadi beberapa level
+- `*_base`: integer dalam satuan terkecil, biasanya PCS.
+- `*_display`: string untuk dibaca user, misalnya `6 CTN 37 PCS`.
+
+Contoh struktur `CTN-PCK-PCS`:
+
+- 1 CTN berisi beberapa PCK.
+- 1 PCK berisi beberapa PCS.
+- Nilai base akan dipecah lagi menjadi display saat tampil di laporan.
 
 ## Role
 
-### Admin
-- full access
-- kelola master data
-- kelola user
-- tutup sesi harian
-- lihat dan export laporan
-
-### Stock Officer
-- fokus ke sesi stock opname
-- scan barcode
-- input qty aktual
-- update item jika perlu
-- tidak fokus ke pengelolaan data master
+| Role | Akses |
+|---|---|
+| Admin | Master data, upload stok, sesi stock, laporan, user management |
+| Stock Officer | Scan barcode dan update item pada sesi yang ditugaskan |
 
 ## Login Default
 
-Seeder tersedia untuk data awal:
+Seeder membuat user berikut:
 
-- `admin@distora.com` / `password`
-- `officer1@distora.com` / `password`
-- `officer2@distora.com` / `password`
+| Email | Password | Role |
+|---|---|---|
+| `admin@distora.com` | `password` | Admin |
+| `officer1@distora.com` | `password` | Stock Officer |
+| `officer2@distora.com` | `password` | Stock Officer |
 
-## Instalasi
-
-Masuk ke folder backend:
+## Quick Start Development
 
 ```bash
 cd backend
-```
-
-Install dependency:
-
-```bash
 composer install
 npm install
-```
-
-Siapkan environment:
-
-```bash
 cp .env.example .env
 php artisan key:generate
-```
-
-Jalankan migrasi:
-
-```bash
 php artisan migrate
-```
-
-Jika pakai SQLite, buat file database dulu:
-
-```bash
-php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
-```
-
-Jalankan seeder:
-
-```bash
 php artisan db:seed
-```
-
-Build asset:
-
-```bash
 npm run build
+php artisan serve --host=127.0.0.1 --port=8010
 ```
 
-## Development
+Buka:
 
-Jalankan semua proses dev:
-
-```bash
-composer run dev
+```text
+http://127.0.0.1:8010/admin
 ```
 
-Atau manual:
+## Operasional Lokal
 
-```bash
-php artisan serve
-npm run dev
-php artisan queue:listen
-php artisan pail
-```
-
-## Operasional Lokal Satu Klik
-
-Untuk menjalankan aplikasi dari PC kantor/gudang:
+Untuk PC kantor/gudang, gunakan script root project:
 
 ```bat
 START-DISTORA.bat
@@ -174,53 +133,54 @@ Untuk stop:
 STOP-DISTORA.bat
 ```
 
-Panduan lengkap ada di `docs/OPERASIONAL-LOKAL.md`.
+Panduan lengkap ada di [docs/OPERASIONAL-LOKAL.md](docs/OPERASIONAL-LOKAL.md).
 
 ## Testing
 
 ```bash
+cd backend
 php artisan test
 ```
+
+Status terakhir: 12 test pass.
 
 ## Struktur Folder
 
 ```text
 distora-stock/
-├── backend/                  # Aplikasi Laravel utama
-│   ├── app/
-│   │   ├── DTOs/
-│   │   ├── Enums/
-│   │   ├── Filament/
-│   │   ├── Models/
-│   │   └── Services/
-│   ├── database/
-│   ├── resources/
-│   ├── routes/
-│   └── tests/
-├── mobile/                   # Rencana Flutter mobile app
-├── docs/                     # Dokumentasi tambahan
-├── excel/                    # Contoh file CSV / Excel
-├── CHANGELOG.md
-├── PROJECT_STATUS.md
-└── SESSION_HANDOVER.md
+|-- backend/                  # Aplikasi Laravel
+|   |-- app/
+|   |   |-- DTOs/
+|   |   |-- Enums/
+|   |   |-- Filament/
+|   |   |-- Models/
+|   |   `-- Services/
+|   |-- database/
+|   |-- resources/
+|   |-- routes/
+|   `-- tests/
+|-- docs/                     # Dokumentasi operasional
+|-- excel/                    # Contoh file CSV/Excel
+|-- mobile/                   # Companion app/mobile work area
+|-- START-DISTORA.bat
+|-- STOP-DISTORA.bat
+|-- CHANGELOG.md
+|-- PROJECT_STATUS.md
+`-- SESSION_HANDOVER.md
 ```
-
-## Catatan Teknis
-
-- Semua interaksi utama saat ini lewat Filament panel.
-- REST API belum menjadi bagian utama arsitektur.
-- Barcode matching mencari `barcode` dulu, lalu fallback ke `kode_barang`.
-- Sesi stock opname berjalan per tanggal aktif.
-- Penutupan sesi harian dilakukan oleh admin.
 
 ## Dokumentasi Tambahan
 
-- `CHANGELOG.md` — riwayat perubahan
-- `PROJECT_STATUS.md` — status fitur
-- `SESSION_HANDOVER.md` — konteks teknis cepat
-- `docs/OPERASIONAL-LOKAL.md` — panduan start/stop lokal satu klik
-- `backend/README.md` — ringkasan backend
+- [CHANGELOG.md](CHANGELOG.md): riwayat perubahan.
+- [PROJECT_STATUS.md](PROJECT_STATUS.md): status fitur dan backlog.
+- [SESSION_HANDOVER.md](SESSION_HANDOVER.md): konteks teknis untuk lanjut kerja.
+- [docs/OPERASIONAL-LOKAL.md](docs/OPERASIONAL-LOKAL.md): SOP start/stop lokal.
+- [backend/README.md](backend/README.md): catatan teknis backend.
 
-## Lisensi
+## Catatan Penting
 
-Proyek internal Distora.
+- Semua workflow utama berjalan melalui Filament panel.
+- Scan page hanya menampilkan sesi pada tanggal hari ini.
+- Jangan edit CSV backup di aplikasi yang mengubah format cell tanpa mengecek hasilnya.
+- Untuk barcode panjang, export CSV sudah dibuat Excel-safe, tapi tetap disarankan cek sample sebelum restore massal.
+

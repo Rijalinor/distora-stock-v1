@@ -1,112 +1,100 @@
 # Changelog
 
-Semua perubahan signifikan pada proyek ini akan dicatat di sini.
+Semua perubahan signifikan pada proyek ini dicatat di sini.
 
----
-
-## [0.3.0] — 2026-07-16
+## [0.4.0] - 2026-07-22
 
 ### Added
-- **User Management** — Filament Resource untuk manage pengguna
-  - `UserResource` di `Master Data` navigation group (admin only)
-  - Create & Edit user dengan form (name, email, password, role)
-  - Role badge (Admin / Stock Officer) di tabel
-  - Password hashing otomatis (hash on create, optional on edit)
-  - Soft-delete prevention via hard delete with confirmation
-- **Reports Page** — Halaman laporan operasional (`/admin/reports`)
-  - 100% komponen bawaan Filament (StatsOverviewWidget, Table, Action, DatePicker, ActionGroup)
-  - Tanpa custom Blade view — menggunakan default page layout
-  - Header action modal untuk filter tanggal (`DatePicker`)
-  - Summary cards via `StatsOverviewWidget` (5 stat: Sesi, Total Item, Tercek, Sesuai, Selisih)
-  - Tabel item selisih via `InteractsWithTable` (dengan filter Principal)
-  - ActionGroup export: Download Laporan Harian & Download Data Selisih
-  - Admin-only access
+
+- Search pada daftar **Belum Dicek** di halaman scan.
+- Kode barang pada daftar **Belum Dicek** dan **Item Selisih**.
+- Tombol Edit pada item belum dicek.
+- Tombol **Tidak Ada** langsung dari item belum dicek, dengan konfirmasi.
+- Tombol **Ganti Principal** pada ringkasan sesi.
+- Indikator jumlah barcode duplikat di Item Master.
+- Filter **Barcode Duplikat** di Item Master.
+- Format display untuk selisih di tabel laporan dan detail sesi.
+- Test export laporan dengan qty display unit.
+
+### Changed
+
+- `startEditItem()` hanya masuk mode koreksi jika item sudah pernah dicek.
+- Backup Item Master membuat kode/barcode sebagai teks Excel-safe.
+- Restore Item Master bisa membaca nilai Excel-safe seperti `="8991234567890"`.
+- Export laporan harian memakai display unit, bukan base mentah.
+- Export laporan harian menghapus kolom Plus dan Minus.
+- Export laporan harian, selisih, dan sesi membuat kode/barcode Excel-safe.
+- `STOP-DISTORA.bat` menutup CMD otomatis setelah selesai.
+- Form qty structure Item Master menjaga factor `PCS` sebagai `1`.
+
+### Fixed
+
+- Barcode panjang tidak lagi mudah berubah menjadi scientific notation saat CSV dibuka di Excel.
+- Selisih laporan tidak lagi tampil sebagai angka base mentah.
+- Barcode duplikat tetap diselesaikan dalam scope sesi aktif, bukan seluruh master.
+
+## [0.3.0] - 2026-07-16
+
+### Added
+
+- User Management Filament Resource untuk admin.
+- Reports Page di `/admin/reports`.
+- Filter tanggal dan principal pada laporan.
+- Summary cards laporan.
+- Tabel item selisih.
+- Export laporan harian dan data selisih.
+- Database seeder untuk admin dan stock officer.
 
 ### Enhanced
-- **ReportService** — New methods
-  - `getDailySummary()` — aggregated stats per date
-  - `getAllSelisihItems()` — all mismatched items across sessions
-  - `buildDailyCsv()` — CSV export for daily session summary
-  - `buildSelisihCsv()` — CSV export for all selisih items
 
-### Resolved Issues (from v0.2.0)
-- ✅ Filament Resource untuk User management — **Selesai**
-- ✅ ReportService UI page — **Selesai**
-- ✅ Database seeder — **Sudah ada** (tidak perlu dibuat)
+- `ReportService::getDailySummary()`.
+- `ReportService::getAllSelisihItems()`.
+- `ReportService::buildDailyCsv()`.
+- `ReportService::buildSelisihCsv()`.
 
----
-
-## [0.2.0] — 2026-07-16
+## [0.2.0] - 2026-07-16
 
 ### Added
-- **Stock Scanning Page** (`/admin/stock-scanning`) — Livewire-based barcode scanning UI
-  - Pilih session principal untuk hari ini
-  - Scan barcode atau input kode barang
-  - Input qty aktual multi-level (CTN-PCS/PCK) dengan konversi otomatis
-  - Tombol "Lengkap" untuk item sesuai sistem
-  - Progress bar per session
-  - Daftar item selisih untuk koreksi cepat
-  - Kalkulasi base quantity dari multi-level factors
-- **Stock Adjustment Logging** — Riwayat perubahan qty aktual
-  - `StockAdjustmentLog` model & migration
-  - Catat qty before/after + reason
-- **Report Service** — `ReportService` class
-  - `getSessionReport()` — detail item per session
-  - `getSelisihReport()` — item selisih saja
-  - `getDailyReport()` — summary per hari
-  - `buildSessionCsv()` — export CSV report
-- **StockSessionService** — `assignOfficer()`, `completeSession()`, `recalculateProgress()`
-- **Feature Test** — `StockOpnameServicesTest` mencakup:
-  - Parsing display format CSV
-  - Parsing conversion factors dari nama barang
-  - Kalkulasi & split base quantity
-  - Sync database + generate sessions dari CSV
-  - Scan & record stock (matched & mismatched)
-  - Update stock dengan adjustment log
-  - Complete session
+
+- Stock Scanning Page di `/admin/stock-scanning`.
+- Pilih sesi principal hari ini.
+- Scan barcode atau input kode barang.
+- Input qty aktual multi-level.
+- Tombol "Lengkap" untuk item sesuai sistem.
+- Progress bar per session.
+- Daftar item selisih untuk koreksi cepat.
+- Stock adjustment logging.
+- `StockAdjustmentLog` model dan migration.
+- `ReportService` awal.
+- `StockSessionService::assignOfficer()`.
+- `StockSessionService::completeSession()`.
+- `StockSessionService::recalculateProgress()`.
+- Feature test untuk workflow stock opname.
 
 ### Architecture
-- Service layer pattern: `CsvImportService`, `StockSessionService`, `StockScanningService`, `ReportService`
-- DTOs: `CsvRowData`, `CsvPreviewResult`
-- Backed Enums: `UserRole`, `StockSessionStatus`, `StockSessionItemStatus`, `CsvUploadStatus`
-- Filament Admin Panel dengan Amber color theme
-- Database schema: 7 migrations (users, principals, item_masters, csv_uploads, stock_sessions, stock_session_items, stock_adjustment_logs)
 
-### Known Issues
-- Belum ada Filament Resource untuk User management
-- ReportService sudah ada method-nya tapi belum ada UI page di Filament
-- Belum ada REST API untuk mobile app
-- Belum ada database seeder untuk data awal
+- Service layer: `CsvImportService`, `StockSessionService`, `StockScanningService`, `ReportService`.
+- DTO: `CsvRowData`, `CsvPreviewResult`.
+- Backed enum: `UserRole`, `StockSessionStatus`, `StockSessionItemStatus`, `CsvUploadStatus`.
+- Filament Admin Panel dengan Amber theme.
 
----
-
-## [0.1.0] — 2026-07-15
+## [0.1.0] - 2026-07-15
 
 ### Added
-- Setup Laravel 12 + Filament 5.6
-- **Master Data CRUD** — Filament Resources
-  - `PrincipalResource` (supplier/brand management)
-  - `ItemMasterResource` (product catalog)
-- **CSV Import** — Upload & parse CSV file
-  - `CsvImportService.parseAndPreview()` — parse CSV dengan validasi kolom
-  - `CsvUploadResource` — Filament CRUD untuk upload
-  - Auto-sync principals & item masters dari CSV
-- **Stock Session Generation** — `StockSessionService.generateSessions()`
-  - Group by principal, 1 session per principal
-  - Item-level status tracking (pending/matched/mismatched)
-- **Database Migrations** — 7 migrasi siap pakai
-  - Users (dengan role admin/stock_officer)
-  - Principals (kode unik, nama, status)
-  - Item Masters (kode_barang, barcode, nama, principal, satuan)
-  - CSV Uploads (file tracking, status, summary)
-  - Stock Sessions (session_date, assigned_to, progress counters)
-  - Stock Session Items (multi-level qty, selisih, status)
-  - Stock Adjustment Logs (audit trail qty changes)
-- **Tailwind CSS 4 + Vite 7** setup
-- **Sample data** — CSV file contoh di `excel/`
+
+- Setup Laravel 12 dan Filament 5.6.
+- Principal CRUD.
+- Item Master CRUD.
+- CSV upload dan parse.
+- Auto-sync principal dan item master.
+- Generate stock session per principal.
+- Database migrations inti.
+- Tailwind CSS 4 dan Vite 7.
+- Sample file di `excel/`.
 
 ### Infrastructure
-- SQLite sebagai database default (MySQL juga dikonfigurasi)
-- Queue worker untuk background processing
-- Automated setup script (`composer run setup`)
-- Dev server script (`composer run dev`) dengan 4 proses paralel
+
+- SQLite sebagai database default development.
+- MySQL dikonfigurasi untuk production.
+- Composer setup/dev scripts.
+

@@ -1,86 +1,99 @@
 # Session Handover
 
-> **Tanggal:** 2026-07-16
-> **Project:** Distora Stock — Aplikasi Stock Opname
+Tanggal: 2026-07-22
 
----
+Project: Distora Stock
 
 ## Current State
 
-Proyek dalam tahap **Alpha** — fitur inti stock opname (CSV import → generate session → barcode scanning → record qty → selisih → adjustment log) sudah berfungsi dan sudah ter-test.
+Aplikasi sudah siap untuk workflow stock opname internal:
 
-Yang masih kurang:
-1. **Reporting UI** — Service logic sudah ada, Filament page belum
-2. **User Management** — Tidak ada UI untuk manage users (CRUD user + assign role)
-3. **Database Seeder** — Tidak ada data awal, perlu bikin admin via tinker manual
+1. Admin upload CSV stok harian.
+2. Sistem sync principal dan item master.
+3. Sistem generate sesi per principal.
+4. Petugas scan/input barang di menu **Scan Barcode**.
+5. Petugas isi qty aktual, tandai lengkap, atau tandai tidak ada.
+6. Admin review selisih dan export laporan.
 
----
+Branch lokal saat dokumentasi ini diperbarui: `master`, ahead dari `origin/master`
+karena commit fitur belum berhasil dipush dari environment ini.
 
-## Technical Context
+## Recent Changes
 
-### Environment
-- **OS:** Windows (XAMPP)
-- **PHP:** ^8.2
-- **Database:** SQLite (default), MySQL juga di-support
-- **Node:** required untuk Vite
+- Daftar **Belum Dicek** bisa dicari berdasarkan kode/nama.
+- Item belum dicek menampilkan kode barang, qty sistem, tombol Edit, dan tombol Tidak Ada.
+- Item selisih menampilkan kode barang.
+- Duplicate barcode di scan hanya menampilkan item yang ada di sesi aktif.
+- Item Master punya indikator/filter barcode duplikat.
+- Backup Item Master dibuat Excel-safe untuk kode/barcode.
+- Restore Item Master bisa membaca format Excel-safe.
+- Laporan tidak menampilkan base mentah untuk selisih.
+- Export laporan harian menghapus kolom Plus dan Minus.
+- Export laporan membuat kode/barcode Excel-safe.
+- `STOP-DISTORA.bat` menutup CMD otomatis setelah selesai.
 
-### Running the App
-```bash
-cd C:\xampp\htdocs\distora-stock\backend
-composer run dev
-```
-Atau akses langsung via browser ke `http://localhost/distora-stock/backend/public/admin`
+## Key Files
 
-### Key Files
 | File | Purpose |
 |---|---|
-| `backend/app/Services/CsvImportService.php` | Parse & sync CSV ke database |
-| `backend/app/Services/StockSessionService.php` | Generate & manage sessions |
-| `backend/app/Services/StockScanningService.php` | Barcode scanning & qty recording |
-| `backend/app/Services/ReportService.php` | Report & CSV export (no UI yet) |
-| `backend/app/Filament/Pages/StockScanning.php` | Scanning page logic |
-| `backend/resources/views/filament/pages/stock-scanning.blade.php` | Scanning page view |
+| `backend/app/Services/CsvImportService.php` | Parse dan sync CSV stok |
+| `backend/app/Services/StockSessionService.php` | Generate sesi, assign, progress |
+| `backend/app/Services/StockScanningService.php` | Lookup barcode dan record qty |
+| `backend/app/Services/ReportService.php` | Query laporan dan CSV export |
+| `backend/app/Services/ItemMasterBackupService.php` | Backup/restore Item Master |
+| `backend/app/Filament/Pages/StockScanning.php` | Logic halaman scan |
+| `backend/resources/views/filament/pages/stock-scanning.blade.php` | View halaman scan |
+| `backend/app/Filament/Pages/Reports.php` | Halaman laporan |
+| `backend/app/Filament/Resources/ItemMasters/Tables/ItemMastersTable.php` | Tabel Item Master dan filter duplikat |
+| `STOP-DISTORA.bat` | Stop proses lokal |
 
-### Database
-```mermaid
-erDiagram
-    users ||--o{ csv_uploads : uploads
-    users ||--o{ stock_sessions : assigned
-    users ||--o{ stock_adjustment_logs : adjusts
-    principals ||--o{ item_masters : has
-    principals ||--o{ stock_sessions : has
-    csv_uploads ||--o{ stock_sessions : generates
-    item_masters ||--o{ stock_session_items : reference
-    stock_sessions ||--o{ stock_session_items : contains
-    stock_session_items ||--o{ stock_adjustment_logs : logs
+## Running Locally
+
+```bat
+START-DISTORA.bat
 ```
 
----
+Local URL:
 
-## Next Steps (Recommended Order)
+```text
+http://127.0.0.1:8010/admin
+```
 
-1. **Create User Management UI** — Filament Resource for users + seeder
-2. **Create Report Page** — Filament page with session report, selisih report, daily summary, CSV download
-3. **Add Input Validation** — qtyLevels validation on scan page
-4. **Add Session Complete Confirmation** — modal/notification
-5. **Dashboard Widgets** — today's sessions summary, recent selisih items
-6. **REST API** — if mobile app is planned
+Stop:
 
----
+```bat
+STOP-DISTORA.bat
+```
 
-## Known Issues / Gotchas
+## Tests
 
-1. **CSV Column Names** — The CSV parser expects specific column names: `Principle#`, `Principle Description`, `Item#`, `Item Description`, `Size`, `OnHand`, `OnHand Base`. Note: "Principle" (typo) is intentional — it matches the actual CSV file.
-2. **Conversion Factors** — Parsed from item name using regex `\(1X(\d+)(?:X(\d+))?\)`. Only works if the format is exactly "(1X...)" — no other patterns supported yet.
-3. **Barcode Matching** — `findByBarcode()` first tries `item_masters.barcode`, then falls back to matching by `kode_barang` directly in session items.
-4. **Session Date** — Scan page only shows sessions for `today()`. No way to work on past-dated sessions.
-5. **Queue** — Queue worker is configured but no jobs are queued yet (everything runs synchronously in transactions).
-6. **No Soft Deletes** — All records are hard-deleted.
+```bash
+cd backend
+php artisan test
+```
 
----
+Last known result: 12 passed.
 
-## Contact / Ownership
+Known warning:
 
-- **Project Owner:** Distora
-- **Developer:** (unknown — project is built by AI/multiple contributors)
-- **Repository:** Internal, no remote configured yet
+- PHP tries to load missing `xmlrpc` extension in XAMPP.
+- PHPUnit warns that doc-comment metadata will be deprecated in PHPUnit 12.
+
+Both warnings do not currently fail the suite.
+
+## Gotchas
+
+- CSV parser expects source column names matching the distributor file, including `Principle#`.
+- Scan page only lists sessions for `today()`.
+- Barcode lookup is intentionally scoped to the active stock session.
+- `selisih` is stored as base integer but should be displayed/exported with unit formatting through `ReportService::formatBaseQty()`.
+- CSV exports use Excel formula text for code/barcode. Do not remove this unless replacing CSV with true XLSX export.
+- Do not use `git reset --hard` unless explicitly requested; the worktree may contain user changes.
+
+## Recommended Next Work
+
+1. Manual QA on real device and scanner workflow.
+2. Decide whether completing sessions with pending items should be allowed.
+3. Add export for pending items if warehouse needs a follow-up checklist.
+4. Add CI to run tests on push.
+

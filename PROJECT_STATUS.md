@@ -1,124 +1,122 @@
 # Project Status
 
-> Terakhir diperbarui: 2026-07-16 (v0.3.0)
-
----
+Terakhir diperbarui: 2026-07-22
 
 ## Ringkasan
 
-Proyek **Distora Stock** adalah aplikasi stock opname untuk perusahaan distribusi. Saat ini memasuki tahap **Alpha** — fitur inti sudah berfungsi, masih ada beberapa komponen yang belum terintegrasi penuh dengan UI.
+Distora Stock sudah memiliki workflow inti yang bisa dipakai untuk stock
+opname harian:
 
----
+CSV upload -> sync master data -> generate sesi -> scan/input qty -> review
+selisih -> export laporan.
 
-## ✅ Selesai (100%)
+Status saat ini: **operasional internal / alpha stabil**.
 
-### Backend Infrastructure
-- [x] Laravel 12 setup
-- [x] Filament 5.6 admin panel
-- [x] Vite + Tailwind CSS 4 asset pipeline
-- [x] Database migrations (7 tables)
-- [x] SQLite & MySQL support
-- [x] Queue worker configuration
-- [x] Environment configuration (.env.example)
+## Selesai
 
-### Data Layer
-- [x] Eloquent Models & Relationships
-- [x] Backed Enums (UserRole, Statuses)
-- [x] DTOs (CsvRowData, CsvPreviewResult)
+### Infrastruktur
+
+- [x] Laravel 12.
+- [x] Filament 5.6 admin panel.
+- [x] Tailwind CSS 4 dan Vite.
+- [x] SQLite development dan MySQL production-ready.
+- [x] Seeder user default.
+- [x] Script start/stop lokal Windows.
 
 ### Master Data
-- [x] Principal CRUD (Filament Resource)
-- [x] Item Master CRUD (Filament Resource)
-- [x] CSV Upload & Preview (Filament Resource)
 
-### Stock Opname Core Logic
-- [x] CSV Parsing (multi-level qty, conversion factors)
-- [x] Database sync (Principals & Items from CSV)
-- [x] Stock Session generation (group by principal)
-- [x] Stock Session management (assign officer, complete)
-- [x] Barcode scanning (find by barcode / kode_barang)
-- [x] Multi-level quantity input (CTN-PCS-PCK)
-- [x] Base quantity calculation & splitting
-- [x] Auto status (matched/mismatched)
-- [x] Adjustment logging with reason
-- [x] Progress recalculation
+- [x] Principal CRUD.
+- [x] Item Master CRUD.
+- [x] Barcode scanner di form Item Master.
+- [x] Backup Item Master.
+- [x] Restore Item Master.
+- [x] CSV backup Excel-safe untuk kode dan barcode.
+- [x] Indikator dan filter barcode duplikat.
+- [x] User management admin-only.
+- [x] Audit log.
 
-### UI / Frontend
-- [x] Scan Barcode page (Livewire, real-time)
-- [x] Session selection (today's sessions only)
-- [x] Progress bar per session
-- [x] Quick-edit item selisih
-- [x] Complete session button
-- [x] **Reports Page** — date filter, summary cards, session list, selisih items table
-- [x] **Reports Export** — download CSV harian & CSV selisih
+### Stock Opname
 
-### User Management
-- [x] User CRUD (Filament Resource — Pengguna)
-- [x] Role assignment (admin / stock_officer)
-- [x] Restricted to admin only (canViewAny)
+- [x] Upload CSV stok harian.
+- [x] Preview dan sync principal/item master.
+- [x] Generate sesi per principal.
+- [x] Assign petugas.
+- [x] Scan barcode atau kode barang.
+- [x] Lookup barcode dibatasi ke item dalam sesi aktif.
+- [x] Pilihan kandidat jika barcode duplikat dalam sesi.
+- [x] Input qty aktual multi-level.
+- [x] Mark matched.
+- [x] Mark missing/tidak ada.
+- [x] Koreksi item selisih.
+- [x] Search daftar belum dicek.
+- [x] Edit item dari daftar belum dicek.
+- [x] Progress sesi otomatis.
+
+### Laporan
+
+- [x] Laporan harian.
+- [x] Tabel item selisih.
+- [x] Filter tanggal dan principal.
+- [x] Export laporan harian.
+- [x] Export data selisih.
+- [x] Export detail sesi.
+- [x] Selisih tampil dalam display unit, bukan base mentah.
+- [x] Kolom Plus/Minus dihapus dari laporan harian.
+- [x] Kode/barcode export Excel-safe.
 
 ### Testing
-- [x] Feature test: parsing, conversion factors, base qty
-- [x] Feature test: full workflow (sync → generate → scan → record → adjust → complete)
 
-----
+- [x] Parsing qty display.
+- [x] Parsing conversion factor.
+- [x] Hitung dan split base qty.
+- [x] Sync database dan generate sesi.
+- [x] Scan duplicate barcode.
+- [x] Backup/restore Item Master.
+- [x] Export laporan display unit.
 
-## 🟡 Nearly Done (50-99%)
+Status terakhir: 12 test pass.
 
-_Tidak ada._ Semua komponen inti sudah terintegrasi penuh dengan UI.
+## Belum Ada / Belum Prioritas
 
----
+### Mobile App
 
-## ❌ Belum Dimulai
+- Folder `mobile/` ada, tetapi belum menjadi produk utama.
+- API mobile dasar ada, tetapi workflow utama saat ini tetap Filament.
+- Belum ada build mobile production.
 
-### Mobile App Companion
-- `mobile/` directory masih kosong
-- Belum ada REST API di backend
-- Belum ada arsitektur / tech stack decided
-- Target: aplikasi Flutter/React Native untuk scan pakai kamera HP
+### Deployment
 
-### API Layer
-- Tidak ada API routes / controllers
-- Semua interaksi via Filament (server-rendered)
+- Belum ada Dockerfile.
+- Belum ada CI/CD.
+- Belum ada deployment automation.
 
-### Deployment / Infrastructure
-- Belum ada Dockerfile
-- Belum ada CI/CD pipeline
-- Belum ada deployment script
+### Hardening
 
-### Dokumentasi
-- `docs/` directory masih kosong
-- Belum ada user manual / SOP
+- Validasi tambahan untuk edge case CSV besar.
+- Pembatasan complete session jika masih banyak pending, jika dibutuhkan operasional.
+- Audit lebih detail untuk restore massal.
+- Manual QA di perangkat gudang.
 
----
+## Backlog Prioritas
 
-## 🚧 Dalam Antrian (Next Up)
-
-| Priority | Feature | Estimasi |
+| Prioritas | Item | Catatan |
 |---|---|---|
-| P1 | Input validation (qtyLevels negatif, non-numeric) | 0.5 hari |
-| P1 | Konfirmasi dialog sebelum complete session | 0.5 hari |
-| P2 | Dashboard widget (daily summary, recent sessions) | 1 hari |
-| P3 | REST API endpoints | 3-5 hari |
-| P3 | Mobile app scanning | TBD |
-
----
+| P1 | Manual QA end-to-end di PC gudang dan HP scanner | Pastikan kamera, tunnel, dan layout mobile nyaman |
+| P1 | Review complete session policy | Putuskan boleh tutup dengan pending atau harus blok |
+| P2 | Export pending items | Berguna untuk follow-up barang belum dicek |
+| P2 | Import validation report lebih detail | Tampilkan baris bermasalah dari CSV |
+| P3 | CI test GitHub Actions | Jalankan `php artisan test` otomatis |
+| P3 | Docker/dev container | Untuk setup developer baru |
 
 ## Metrics
 
 | Metrik | Nilai |
 |---|---|
-| Total Files (PHP) | ~53 |
-| Migrations | 7 |
-| Test Cases | 7 (dalam 1 test class) |
-| Test Pass Rate | 100% |
-| PHP Version | ^8.2 |
-| Laravel Version | ^12.0 |
-| Filament Version | ^5.6 |
-| Database | SQLite (dev), MySQL (prod-ready) |
+| Test cases | 12 |
+| Test pass rate | 100% pada run terakhir |
+| PHP | ^8.2 |
+| Laravel | ^12.0 |
+| Filament | ^5.6 |
+| Database dev | SQLite |
+| Database prod | MySQL |
 
-### Changelog Rilis
-
-- **v0.3.0** — User Management UI + Reports Page + CSV Export + Database Seeder
-- **v0.2.0** — Stock Scanning Page + Adjustment Log + Report Service + Feature Tests
-- **v0.1.0** — Setup Laravel + Filament + Master Data CRUD + CSV Import + Session Generation

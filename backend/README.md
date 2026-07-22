@@ -1,87 +1,97 @@
 # Distora Stock Backend
 
-Backend aplikasi stock opname berbasis **Laravel 12** dan **Filament 5.6**.
+Backend Distora Stock adalah aplikasi Laravel 12 dengan Filament 5.6. Semua
+operasi utama dilakukan dari admin panel di `/admin`.
 
-Dokumentasi utama proyek ada di [README root](../README.md).
+## Modul Backend
 
-## Yang Ada di Backend
+| Modul | Lokasi | Fungsi |
+|---|---|---|
+| CSV Import | `app/Services/CsvImportService.php` | Parse CSV stok dan sync database |
+| Sesi Stock | `app/Services/StockSessionService.php` | Generate sesi, assign petugas, hitung progress |
+| Scan Stock | `app/Services/StockScanningService.php` | Lookup barcode, hitung qty, record aktual |
+| Laporan | `app/Services/ReportService.php` | Query laporan dan build CSV export |
+| Backup Item | `app/Services/ItemMasterBackupService.php` | Backup/restore Item Master Excel-safe |
+| Audit Log | `app/Services/AuditLogService.php` | Catat perubahan penting |
 
-- Master data principal
-- Master data item
-- User management
-- Import CSV stok
-- Generate sesi stock opname
-- Scan barcode
-- Input qty aktual bertingkat
-- Report harian
-- Export CSV
-- Penutupan sesi harian
+## Filament Area
 
-## Struktur Qty
+| Area | Lokasi |
+|---|---|
+| Scan Barcode | `app/Filament/Pages/StockScanning.php` |
+| Laporan | `app/Filament/Pages/Reports.php` |
+| Item Master | `app/Filament/Resources/ItemMasters/` |
+| Principal | `app/Filament/Resources/Principals/` |
+| Upload Stok Harian | `app/Filament/Resources/CsvUploads/` |
+| Sesi Stock | `app/Filament/Resources/StockSessions/` |
+| Pengguna | `app/Filament/Resources/Users/` |
+| Audit Log | `app/Filament/Resources/AuditLogs/` |
 
-Backend menyimpan qty dalam format:
+## Qty Rules
 
-- `*_base` untuk nilai dasar
-- `*_display` untuk tampilan manusia
+Backend menyimpan qty dalam dua format:
 
-Contoh:
+- `qty_*_base`: integer dalam satuan terkecil.
+- `qty_*_display`: tampilan user, seperti `1 CTN 2 PCK 15 PCS`.
 
-- `qty_sistem_base`
-- `qty_sistem_display`
-- `qty_aktual_base`
-- `qty_aktual_display`
-- `selisih`
+`selisih` tetap disimpan sebagai base untuk perhitungan, tetapi UI dan export
+laporan menampilkan format display.
 
-## Quick Start
+## Barcode Rules
 
-```bash
-cp .env.example .env
-composer install
-php artisan key:generate
-php artisan migrate
-npm install
-npm run build
+- Scan menerima barcode atau `kode_barang`.
+- Lookup barcode dibatasi pada `stock_session_items` dari sesi aktif.
+- Jika satu barcode cocok ke beberapa item dalam sesi yang sama, UI meminta petugas memilih kode barang.
+- Item Master memiliki kolom/filter untuk melihat barcode duplikat.
+
+## CSV Export Rules
+
+Kode dan barcode pada export CSV dibuat Excel-safe dengan format teks Excel
+agar tidak berubah menjadi tanggal, scientific notation, atau kehilangan nol
+depan.
+
+Contoh nilai export:
+
+```csv
+"=""8991234567890"""
 ```
+
+Restore Item Master juga memahami format tersebut.
 
 ## Development
 
 ```bash
-composer run dev
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan db:seed
+npm run build
+php artisan serve --host=127.0.0.1 --port=8010
 ```
 
-Komponen yang berjalan:
-
-- `php artisan serve`
-- `npm run dev`
-- `php artisan queue:listen`
-- `php artisan pail`
-
-## Testing
+## Test
 
 ```bash
 php artisan test
 ```
 
+Status terakhir: 12 test pass.
+
 ## Default Login
 
-- `admin@distora.com` / `password`
-- `officer1@distora.com` / `password`
-- `officer2@distora.com` / `password`
+| Email | Password | Role |
+|---|---|---|
+| `admin@distora.com` | `password` | Admin |
+| `officer1@distora.com` | `password` | Stock Officer |
+| `officer2@distora.com` | `password` | Stock Officer |
 
-## Folder Penting
+## Catatan Implementasi
 
-| Path | Isi |
-|---|---|
-| `app/Services/` | Business logic |
-| `app/Filament/` | Pages, widgets, resources |
-| `app/Models/` | Model Eloquent |
-| `database/migrations/` | Skema database |
-| `resources/views/filament/` | Blade custom Filament |
-| `tests/Feature/` | Test feature |
+- Gunakan service layer untuk business logic.
+- Gunakan transaksi database untuk operasi multi-table.
+- Jangan simpan qty pecahan di database. Semua base qty adalah integer.
+- UI scan memakai custom Blade di `resources/views/filament/pages/stock-scanning.blade.php`.
+- Reports page memakai Filament table bawaan, bukan custom Blade besar.
 
-## Catatan Operasional
-
-- Dashboard diarahkan ke shortcut scan barcode.
-- Halaman scan barcode memakai sesi aktif.
-- Sesi harian bisa ditutup oleh admin setelah review principal yang belum selesai.
-- Laporan menampilkan ringkasan sesi dan item selisih.
