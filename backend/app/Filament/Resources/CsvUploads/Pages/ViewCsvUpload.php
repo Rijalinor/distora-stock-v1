@@ -34,6 +34,10 @@ class ViewCsvUpload extends ViewRecord
                         TextEntry::make('original_filename')
                             ->label('Nama File'),
 
+                        TextEntry::make('branch.nama')
+                            ->label('Cabang')
+                            ->placeholder('-'),
+
                         TextEntry::make('total_rows')
                             ->label('Total Item')
                             ->numeric(),

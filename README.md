@@ -86,8 +86,17 @@ Contoh struktur `CTN-PCK-PCS`:
 
 | Role | Akses |
 |---|---|
-| Admin | Master data, upload stok, sesi stock, laporan, user management |
-| Stock Officer | Scan barcode dan update item pada sesi yang ditugaskan |
+| Admin Pusat | Semua cabang, semua master data, semua sesi, semua laporan, user management |
+| Admin Cabang | Item master cabang sendiri, upload stok cabang, sesi cabang, laporan cabang |
+| Stock Officer | Scan barcode dan update item pada sesi cabangnya |
+
+## Struktur Cabang
+
+Sistem mendukung pemakaian multi cabang. Admin pusat bisa melihat semua data
+secara global, sedangkan admin cabang hanya mengelola cabangnya sendiri.
+
+Untuk contoh struktur 3 cabang, lihat
+[docs/STRUKTUR-3-CABANG.md](docs/STRUKTUR-3-CABANG.md).
 
 ## Login Default
 
@@ -98,6 +107,28 @@ Seeder membuat user berikut:
 | `admin@distora.com` | `password` | Admin |
 | `officer1@distora.com` | `password` | Stock Officer |
 | `officer2@distora.com` | `password` | Stock Officer |
+
+## Membuat Admin Pusat Pertama Kali
+
+Admin pusat adalah user dengan role `admin` dan cabang kosong atau `null`.
+Untuk memastikan user bawaan menjadi admin pusat, jalankan:
+
+```bash
+cd backend
+php artisan db:seed
+php artisan user:make-central-admin admin@distora.com
+```
+
+Setelah itu login dengan:
+
+```text
+Email: admin@distora.com
+Password: password
+```
+
+Admin pusat bisa melihat semua cabang, semua item master, semua sesi, semua
+laporan, dan membuat admin cabang. Detail struktur cabang ada di
+[docs/STRUKTUR-3-CABANG.md](docs/STRUKTUR-3-CABANG.md).
 
 ## Quick Start Development
 
@@ -142,7 +173,7 @@ cd backend
 php artisan test
 ```
 
-Status terakhir: 12 test pass.
+Status terakhir: 15 test pass.
 
 ## Struktur Folder
 
@@ -175,6 +206,7 @@ distora-stock/
 - [PROJECT_STATUS.md](PROJECT_STATUS.md): status fitur dan backlog.
 - [SESSION_HANDOVER.md](SESSION_HANDOVER.md): konteks teknis untuk lanjut kerja.
 - [docs/OPERASIONAL-LOKAL.md](docs/OPERASIONAL-LOKAL.md): SOP start/stop lokal.
+- [docs/STRUKTUR-3-CABANG.md](docs/STRUKTUR-3-CABANG.md): struktur operasional 3 cabang.
 - [backend/README.md](backend/README.md): catatan teknis backend.
 
 ## Catatan Penting
@@ -183,4 +215,3 @@ distora-stock/
 - Scan page hanya menampilkan sesi pada tanggal hari ini.
 - Jangan edit CSV backup di aplikasi yang mengubah format cell tanpa mengecek hasilnya.
 - Untuk barcode panjang, export CSV sudah dibuat Excel-safe, tapi tetap disarankan cek sample sebelum restore massal.
-

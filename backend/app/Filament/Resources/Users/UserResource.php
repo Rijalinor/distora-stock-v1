@@ -13,6 +13,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 class UserResource extends Resource
@@ -42,6 +43,18 @@ class UserResource extends Resource
     public static function table(Table $table): Table
     {
         return UsersTable::configure($table);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = Auth::user();
+
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id) {
+            $query->where('branch_id', $user->branch_id);
+        }
+
+        return $query;
     }
 
     public static function getRelations(): array

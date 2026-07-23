@@ -36,7 +36,9 @@ class StockSessionService
                 ]);
 
             // 2. Get database map for Item Masters (kode_barang -> id)
-            $itemsMap = ItemMaster::pluck('id', 'kode_barang');
+            $itemsMap = ItemMaster::query()
+                ->where('branch_id', $upload->branch_id)
+                ->pluck('id', 'kode_barang');
 
             // 3. Group rows by effective principal id, so merged principals share one session.
             $rowsByPrincipal = collect($previewResult->rows)
@@ -51,6 +53,7 @@ class StockSessionService
                 $session = StockSession::create([
                     'csv_upload_id' => $upload->id,
                     'principal_id' => $principalId,
+                    'branch_id' => $upload->branch_id,
                     'session_date' => $upload->upload_date,
                     'status' => StockSessionStatus::Open,
                     'total_items' => $rows->count(),

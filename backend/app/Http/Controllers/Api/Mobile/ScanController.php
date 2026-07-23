@@ -15,7 +15,7 @@ class ScanController extends Controller
     {
         $user = $request->user();
 
-        if ($user?->isStockOfficer() && $session->assigned_to && $session->assigned_to !== $user->id) {
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id && $session->branch_id !== $user->branch_id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

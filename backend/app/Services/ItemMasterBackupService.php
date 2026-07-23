@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ItemMaster;
+use App\Models\Branch;
 use App\Models\Principal;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +16,8 @@ class ItemMasterBackupService
     {
         $lines = [];
         $lines[] = $this->row([
+            'branch_kode',
+            'branch_nama',
             'principal_kode',
             'principal_nama',
             'kode_barang',
@@ -29,11 +32,14 @@ class ItemMasterBackupService
         ]);
 
         ItemMaster::query()
-            ->with('principal')
+            ->with(['branch', 'principal'])
+            ->orderBy('branch_id')
             ->orderBy('kode_barang')
             ->chunk(500, function ($items) use (&$lines): void {
                 foreach ($items as $item) {
                     $lines[] = $this->row([
+                        $this->excelText($item->branch?->kode ?? ''),
+                        $item->branch?->nama ?? '',
                         $this->excelText($item->principal?->kode ?? ''),
                         $item->principal?->nama ?? '',
                         $this->excelText($item->kode_barang),
@@ -92,6 +98,8 @@ class ItemMasterBackupService
                     continue;
                 }
 
+                $branch = $this->resolveBranch($row);
+
                 $principal = Principal::firstOrCreate(
                     ['kode' => trim($row['principal_kode'])],
                     [
@@ -104,7 +112,10 @@ class ItemMasterBackupService
                     $principal->update(['nama' => trim($row['principal_nama'])]);
                 }
 
-                $item = ItemMaster::firstOrNew(['kode_barang' => trim($row['kode_barang'])]);
+                $item = ItemMaster::firstOrNew([
+                    'branch_id' => $branch->id,
+                    'kode_barang' => trim($row['kode_barang']),
+                ]);
                 $exists = $item->exists;
 
                 $item->fill([
@@ -177,6 +188,26 @@ class ItemMasterBackupService
             ],
             $labels,
             array_keys($labels)
+        );
+    }
+
+    protected function resolveBranch(array $row): Branch
+    {
+        $branchKode = trim((string) ($row['branch_kode'] ?? ''));
+
+        if ($branchKode !== '') {
+            return Branch::firstOrCreate(
+                ['kode' => $branchKode],
+                [
+                    'nama' => trim((string) ($row['branch_nama'] ?? '')) ?: $branchKode,
+                    'status' => true,
+                ]
+            );
+        }
+
+        return Branch::firstOrCreate(
+            ['kode' => 'PUSAT'],
+            ['nama' => 'Pusat', 'status' => true]
         );
     }
 }

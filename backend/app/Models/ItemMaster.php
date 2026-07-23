@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class ItemMaster extends Model
 {
     protected $fillable = [
+        'branch_id',
         'kode_barang',
         'barcode',
         'nama_barang',
@@ -27,6 +28,11 @@ class ItemMaster extends Model
     public function principal()
     {
         return $this->belongsTo(Principal::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function setQtyStructureAttribute($value): void

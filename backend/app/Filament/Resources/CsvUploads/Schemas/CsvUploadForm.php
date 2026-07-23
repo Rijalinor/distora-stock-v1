@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\CsvUploads\Schemas;
 
+use App\Models\Branch;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Schema;
 
@@ -28,6 +30,16 @@ class CsvUploadForm
                     ->required()
                     ->default(now())
                     ->native(false),
+
+                Select::make('branch_id')
+                    ->label('Cabang')
+                    ->options(fn () => Branch::query()->where('status', true)->orderBy('nama')->pluck('nama', 'id'))
+                    ->default(fn () => auth()->user()?->branch_id)
+                    ->disabled(fn () => auth()->user()?->isAdmin() && ! auth()->user()?->isCentralAdmin())
+                    ->dehydrated()
+                    ->searchable()
+                    ->preload()
+                    ->required(),
 
                 TextInput::make('notes')
                     ->label('Catatan')

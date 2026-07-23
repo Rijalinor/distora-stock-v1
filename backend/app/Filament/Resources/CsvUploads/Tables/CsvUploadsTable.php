@@ -26,6 +26,11 @@ class CsvUploadsTable
                     ->searchable()
                     ->limit(40),
 
+                TextColumn::make('branch.nama')
+                    ->label('Cabang')
+                    ->placeholder('-')
+                    ->searchable(),
+
                 TextColumn::make('total_rows')
                     ->label('Total Item')
                     ->numeric()
@@ -70,6 +75,12 @@ class CsvUploadsTable
                         CsvUploadStatus::Previewed->value => 'Siap Generate',
                         CsvUploadStatus::Completed->value => 'Selesai',
                     ]),
+
+                SelectFilter::make('branch_id')
+                    ->label('Cabang')
+                    ->relationship('branch', 'nama')
+                    ->searchable()
+                    ->preload(),
             ])
             ->recordActions([
                 ViewAction::make(),

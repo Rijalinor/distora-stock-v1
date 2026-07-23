@@ -16,8 +16,10 @@ class ReportService
             return '-';
         }
 
-        $labels = $item->itemMaster?->getQtyLabelsArray() ?: $this->labelsFromSatuan($item->satuan);
         $factors = $item->itemMaster?->getQtyFactorsArray() ?: \App\Services\StockScanningService::parseConversionFactors($item->nama_barang);
+        $labels = $factors === [1]
+            ? ['PCS']
+            : ($item->itemMaster?->getQtyLabelsArray() ?: $this->labelsFromSatuan($item->satuan));
         $levels = \App\Services\StockScanningService::splitBaseQuantity(abs($baseQty), $factors);
         $labels = $this->normalizeLabels($labels, count($levels));
         $display = \App\Services\StockScanningService::buildQtyDisplayFromLabels($levels, $labels);
@@ -50,11 +52,11 @@ class ReportService
     /**
      * Get all mismatched items across all sessions, optionally filtered by date.
      */
-    public function getAllSelisihItems(?string $date = null, ?int $principalId = null): Collection
+    public function getAllSelisihItems(?string $date = null, ?int $principalId = null, ?int $branchId = null): Collection
     {
         $query = StockSessionItem::query()
             ->whereIn('status', [StockSessionItemStatus::Mismatched, StockSessionItemStatus::Missing])
-            ->with(['stockSession.principal', 'stockSession.assignedOfficer', 'checkedBy']);
+            ->with(['stockSession.branch', 'stockSession.principal', 'stockSession.assignedOfficer', 'checkedBy']);
 
         if ($date) {
             $query->whereHas('stockSession', fn ($q) => $q->whereDate('session_date', $date));
@@ -62,6 +64,10 @@ class ReportService
 
         if ($principalId) {
             $query->whereHas('stockSession', fn ($q) => $q->where('principal_id', $principalId));
+        }
+
+        if ($branchId) {
+            $query->whereHas('stockSession', fn ($q) => $q->where('branch_id', $branchId));
         }
 
         return $query->orderBy('created_at', 'desc')->get();
@@ -72,12 +78,16 @@ class ReportService
      *
      * @return array{sessions: int, total_items: int, checked_items: int, matched_items: int, mismatched_items: int}
      */
-    public function getDailySummary(string $date, ?int $principalId = null): array
+    public function getDailySummary(string $date, ?int $principalId = null, ?int $branchId = null): array
     {
         $sessions = StockSession::whereDate('session_date', $date);
 
         if ($principalId) {
             $sessions->where('principal_id', $principalId);
+        }
+
+        if ($branchId) {
+            $sessions->where('branch_id', $branchId);
         }
 
         $summary = (clone $sessions)
@@ -102,11 +112,12 @@ class ReportService
     /**
      * Get detailed item rows across all stock sessions for a specific date.
      */
-    public function getDailyDetailReport(string $date, ?int $principalId = null): Collection
+    public function getDailyDetailReport(string $date, ?int $principalId = null, ?int $branchId = null): Collection
     {
         return StockSessionItem::query()
             ->with([
                 'stockSession.principal',
+                'stockSession.branch',
                 'stockSession.assignedOfficer',
                 'itemMaster',
                 'checkedBy',
@@ -115,6 +126,10 @@ class ReportService
             ->when($principalId, fn ($q) => $q->whereHas(
                 'stockSession',
                 fn ($q) => $q->where('principal_id', $principalId)
+            ))
+            ->when($branchId, fn ($q) => $q->whereHas(
+                'stockSession',
+                fn ($q) => $q->where('branch_id', $branchId)
             ))
             ->orderBy('created_at')
             ->get();
@@ -126,11 +141,12 @@ class ReportService
     public function buildSessionCsv(StockSession $session): string
     {
         $items = $this->getSessionReport($session);
-        $session->load(['principal', 'assignedOfficer']);
+        $session->load(['branch', 'principal', 'assignedOfficer']);
 
         $lines = [];
         $lines[] = implode(',', [
             'Principal',
+            'Cabang',
             'Kode Barang',
             'Nama Barang',
             'Qty Sistem',
@@ -146,6 +162,7 @@ class ReportService
                 fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
                 [
                     $session->principal->nama,
+                    $session->branch?->nama ?? '-',
                     $this->excelText($item->kode_barang),
                     $item->nama_barang,
                     $item->qty_sistem_display,
@@ -164,13 +181,14 @@ class ReportService
     /**
      * Build CSV content for all selisih items.
      */
-    public function buildSelisihCsv(?string $date = null, ?int $principalId = null): string
+    public function buildSelisihCsv(?string $date = null, ?int $principalId = null, ?int $branchId = null): string
     {
-        $items = $this->getAllSelisihItems($date, $principalId);
+        $items = $this->getAllSelisihItems($date, $principalId, $branchId);
 
         $lines = [];
         $lines[] = implode(',', [
             'Tanggal',
+            'Cabang',
             'Principal',
             'Kode Barang',
             'Nama Barang',
@@ -187,6 +205,7 @@ class ReportService
                 fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
                 [
                     $session?->session_date?->format('Y-m-d') ?? '-',
+                    $session?->branch?->nama ?? '-',
                     $session?->principal?->nama ?? '-',
                     $this->excelText($item->kode_barang),
                     $item->nama_barang,
@@ -205,13 +224,14 @@ class ReportService
     /**
      * Build CSV content for a daily report (item details per principal).
      */
-    public function buildDailyCsv(string $date, ?int $principalId = null): string
+    public function buildDailyCsv(string $date, ?int $principalId = null, ?int $branchId = null): string
     {
-        $items = $this->getDailyDetailReport($date, $principalId);
+        $items = $this->getDailyDetailReport($date, $principalId, $branchId);
 
         $lines = [];
         $lines[] = implode(',', [
             'Tanggal',
+            'Cabang',
             'Principal Kode',
             'Principal',
             'Item Kode',
@@ -234,6 +254,7 @@ class ReportService
                 fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
                 [
                     $session?->session_date?->format('Y-m-d') ?? '-',
+                    $session?->branch?->nama ?? '-',
                     $session?->principal?->kode ?? '-',
                     $session?->principal?->nama ?? '-',
                     $this->excelText($item->kode_barang),

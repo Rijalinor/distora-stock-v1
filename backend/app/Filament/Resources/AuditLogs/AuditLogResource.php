@@ -10,6 +10,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 class AuditLogResource extends Resource
@@ -36,6 +37,18 @@ class AuditLogResource extends Resource
     public static function canCreate(): bool
     {
         return false;
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = Auth::user();
+
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id) {
+            $query->whereHas('user', fn (Builder $query) => $query->where('branch_id', $user->branch_id));
+        }
+
+        return $query;
     }
 
     public static function table(Table $table): Table
@@ -67,10 +80,6 @@ class AuditLogResource extends Resource
                     ->formatStateUsing(fn (?string $state): string => $state ? class_basename($state) : '-')
                     ->badge()
                     ->color('gray'),
-
-                TextColumn::make('ip_address')
-                    ->label('IP')
-                    ->toggleable(),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
@@ -79,12 +88,8 @@ class AuditLogResource extends Resource
                         'created' => 'Created',
                         'updated' => 'Updated',
                         'deleted' => 'Deleted',
-                        'stock_matched' => 'Stock Matched',
                         'stock_missing' => 'Stock Missing',
-                        'stock_recorded' => 'Stock Recorded',
                         'stock_corrected' => 'Stock Corrected',
-                        'session_created' => 'Session Created',
-                        'session_assigned' => 'Session Assigned',
                         'session_completed' => 'Session Completed',
                         'session_closed_by_day' => 'Session Closed By Day',
                     ]),

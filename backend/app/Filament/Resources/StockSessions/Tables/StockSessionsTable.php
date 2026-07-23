@@ -33,6 +33,12 @@ class StockSessionsTable
                     ->sortable()
                     ->limit(35),
 
+                TextColumn::make('branch.nama')
+                    ->label('Cabang')
+                    ->placeholder('-')
+                    ->searchable()
+                    ->sortable(),
+
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
@@ -65,7 +71,7 @@ class StockSessionsTable
                     ->color('danger'),
 
                 TextColumn::make('assignedOfficer.name')
-                    ->label('Petugas')
+                    ->label('Petugas Utama')
                     ->placeholder('Belum ditugaskan'),
 
                 TextColumn::make('started_at')
@@ -93,13 +99,19 @@ class StockSessionsTable
                     ->searchable()
                     ->preload(),
 
+                SelectFilter::make('branch_id')
+                    ->label('Cabang')
+                    ->relationship('branch', 'nama')
+                    ->searchable()
+                    ->preload(),
+
                 Filter::make('csv_upload_id')
                     ->query(fn (Builder $query, array $data): Builder => isset($data['value'])
                         ? $query->where('csv_upload_id', $data['value'])
                         : $query),
 
                 SelectFilter::make('assigned_to')
-                    ->label('Petugas')
+                    ->label('Petugas Utama')
                     ->options(fn () => User::where('role', UserRole::StockOfficer)->pluck('name', 'id')),
             ])
             ->recordActions([

@@ -31,6 +31,9 @@ class CreateCsvUpload extends CreateRecord
         $data['filename'] = $storedPath;
         $data['original_filename'] = basename($storedPath);
         $data['uploaded_by'] = Auth::id();
+        $data['branch_id'] = Auth::user()?->isCentralAdmin()
+            ? $data['branch_id']
+            : Auth::user()?->branch_id;
         $data['status'] = CsvUploadStatus::Pending->value;
         $data['total_rows'] = 0;
 
@@ -45,7 +48,7 @@ class CreateCsvUpload extends CreateRecord
         $fullPath = Storage::disk('local')->path($this->record->filename);
 
         try {
-            $preview = $importService->processUpload($fullPath);
+            $preview = $importService->processUpload($fullPath, $this->record->branch_id);
 
             $this->record->update([
                 'total_rows' => $preview->totalRows,

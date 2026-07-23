@@ -10,6 +10,7 @@ class StockSession extends Model
     protected $fillable = [
         'csv_upload_id',
         'principal_id',
+        'branch_id',
         'session_date',
         'assigned_to',
         'status',
@@ -39,6 +40,11 @@ class StockSession extends Model
     public function principal()
     {
         return $this->belongsTo(Principal::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function assignedOfficer()

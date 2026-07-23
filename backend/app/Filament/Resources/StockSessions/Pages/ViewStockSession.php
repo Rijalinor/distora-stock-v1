@@ -32,6 +32,10 @@ class ViewStockSession extends ViewRecord
                         TextEntry::make('principal.nama')
                             ->label('Principal'),
 
+                        TextEntry::make('branch.nama')
+                            ->label('Cabang')
+                            ->placeholder('-'),
+
                         TextEntry::make('session_date')
                             ->label('Tanggal')
                             ->date('d M Y'),
@@ -58,7 +62,7 @@ class ViewStockSession extends ViewRecord
                             ->numeric(),
 
                         TextEntry::make('assignedOfficer.name')
-                            ->label('Petugas')
+                            ->label('Petugas Utama')
                             ->placeholder('Belum ditugaskan'),
 
                         TextEntry::make('started_at')

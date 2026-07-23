@@ -15,15 +15,12 @@ class SessionController extends Controller
         $user = $request->user();
 
         $query = StockSession::query()
-            ->with(['principal', 'assignedOfficer'])
+            ->with(['principal', 'branch', 'assignedOfficer'])
             ->whereDate('session_date', today())
             ->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress]);
 
-        if ($user?->isStockOfficer()) {
-            $query->where(function ($q) use ($user): void {
-                $q->whereNull('assigned_to')
-                    ->orWhere('assigned_to', $user->id);
-            });
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id) {
+            $query->where('branch_id', $user->branch_id);
         }
 
         $sessions = $query->orderBy('principal_id')->get()->map(fn (StockSession $session) => [
@@ -31,6 +28,10 @@ class SessionController extends Controller
             'principal' => [
                 'id' => $session->principal->id,
                 'nama' => $session->principal->nama,
+            ],
+            'branch' => [
+                'id' => $session->branch?->id,
+                'nama' => $session->branch?->nama,
             ],
             'status' => $session->status->value,
             'total_items' => $session->total_items,
@@ -48,17 +49,21 @@ class SessionController extends Controller
     {
         $user = request()->user();
 
-        if ($user?->isStockOfficer() && $session->assigned_to && $session->assigned_to !== $user->id) {
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id && $session->branch_id !== $user->branch_id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $session->load(['principal', 'assignedOfficer', 'items.checkedBy']);
+        $session->load(['principal', 'branch', 'assignedOfficer', 'items.checkedBy']);
 
         return response()->json([
             'id' => $session->id,
             'principal' => [
                 'id' => $session->principal->id,
                 'nama' => $session->principal->nama,
+            ],
+            'branch' => [
+                'id' => $session->branch?->id,
+                'nama' => $session->branch?->nama,
             ],
             'status' => $session->status->value,
             'session_date' => $session->session_date?->format('Y-m-d'),

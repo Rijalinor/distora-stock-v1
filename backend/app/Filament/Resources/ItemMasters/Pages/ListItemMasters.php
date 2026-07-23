@@ -22,11 +22,13 @@ class ListItemMasters extends ListRecords
                 ->label('Backup Item Master')
                 ->icon('heroicon-m-arrow-down-tray')
                 ->color('gray')
+                ->visible(fn () => auth()->user()?->isCentralAdmin() ?? false)
                 ->action('downloadBackup'),
             Action::make('restoreItemMaster')
                 ->label('Restore Item Master')
                 ->icon('heroicon-m-arrow-up-tray')
                 ->color('warning')
+                ->visible(fn () => auth()->user()?->isCentralAdmin() ?? false)
                 ->requiresConfirmation()
                 ->modalDescription('Upload file CSV backup Item Master. Data dengan kode barang yang sama akan diperbarui.')
                 ->form([

@@ -11,6 +11,7 @@ class CsvUpload extends Model
         'filename',
         'original_filename',
         'upload_date',
+        'branch_id',
         'uploaded_by',
         'total_rows',
         'status',
@@ -30,6 +31,11 @@ class CsvUpload extends Model
     public function uploadedBy()
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function stockSessions()

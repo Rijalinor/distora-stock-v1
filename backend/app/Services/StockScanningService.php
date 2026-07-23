@@ -43,8 +43,10 @@ class StockScanningService
         }
 
         $itemMasterIds = ItemMaster::query()
-            ->where('barcode', $barcode)
-            ->orWhere('kode_barang', $barcode)
+            ->where('branch_id', $session->branch_id)
+            ->where(fn ($query) => $query
+                ->where('barcode', $barcode)
+                ->orWhere('kode_barang', $barcode))
             ->pluck('id');
 
         if ($itemMasterIds->isNotEmpty()) {

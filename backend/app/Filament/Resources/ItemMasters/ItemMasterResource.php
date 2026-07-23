@@ -13,6 +13,9 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 
 class ItemMasterResource extends Resource
@@ -30,6 +33,38 @@ class ItemMasterResource extends Resource
     protected static ?string $modelLabel = 'Item Master';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Master Data';
+
+    public static function canViewAny(): bool
+    {
+        return Auth::user()?->isAdmin() ?? false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return Auth::user()?->isAdmin() ?? false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return Auth::user()?->isAdmin() && Auth::user()->managesBranch($record->branch_id);
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return Auth::user()?->isAdmin() && Auth::user()->managesBranch($record->branch_id);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = Auth::user();
+
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id) {
+            $query->where('branch_id', $user->branch_id);
+        }
+
+        return $query;
+    }
 
     public static function form(Schema $schema): Schema
     {

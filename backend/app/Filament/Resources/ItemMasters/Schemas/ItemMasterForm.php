@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ItemMasters\Schemas;
 
+use App\Models\Branch;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -34,6 +35,15 @@ class ItemMasterForm
                 ViewField::make('barcode_scanner')
                     ->view('filament.forms.components.barcode-scanner'),
                 TextInput::make('nama_barang')
+                    ->required(),
+                Select::make('branch_id')
+                    ->label('Cabang')
+                    ->options(fn () => Branch::query()->where('status', true)->orderBy('nama')->pluck('nama', 'id'))
+                    ->default(fn () => auth()->user()?->branch_id)
+                    ->disabled(fn () => auth()->user()?->isAdmin() && ! auth()->user()?->isCentralAdmin())
+                    ->dehydrated()
+                    ->searchable()
+                    ->preload()
                     ->required(),
                 Select::make('principal_id')
                     ->relationship('principal', 'nama')

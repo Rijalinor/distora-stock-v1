@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\DTOs\CsvPreviewResult;
 use App\DTOs\CsvRowData;
+use App\Models\Branch;
 use App\Models\ItemMaster;
 use App\Models\Principal;
 use Illuminate\Http\UploadedFile;
@@ -86,7 +87,7 @@ class CsvImportService
             }
 
             // Parse Display Qty
-            $qtySistemDisplay = self::parseOnHandDisplay($onHandRaw, $satuan);
+            $qtySistemDisplay = self::parseOnHandDisplay($onHandRaw, $satuan, $itemNama);
 
             // Parse Base Qty (remove commas, cast to int)
             $qtySistemBase = (int) str_replace(',', '', trim($onHandBaseRaw));
@@ -135,7 +136,7 @@ class CsvImportService
      * @param string|null $size
      * @return string
      */
-    public static function parseOnHandDisplay(string $onHand, ?string $size): string
+    public static function parseOnHandDisplay(string $onHand, ?string $size, ?string $itemName = null): string
     {
         $parts = array_map(fn($p) => (int)trim($p), explode('.', $onHand));
         
@@ -144,7 +145,8 @@ class CsvImportService
             $labels = array_map(fn($s) => trim($s), explode('-', $size));
         }
         if (empty($labels)) {
-            $labels = ['CTN', 'PCS'];
+            $factors = $itemName ? StockScanningService::parseConversionFactors($itemName) : [];
+            $labels = $factors === [1] ? ['PCS'] : ['CTN', 'PCS'];
         }
         
         $displayParts = [];
@@ -168,10 +170,10 @@ class CsvImportService
      * @param string $filePath Absolute path to the CSV file
      * @return CsvPreviewResult
      */
-    public function processUpload(string $filePath): CsvPreviewResult
+    public function processUpload(string $filePath, ?int $branchId = null): CsvPreviewResult
     {
         $preview = $this->parseAndPreview($filePath);
-        $this->syncDatabase($preview->rows);
+        $this->syncDatabase($preview->rows, $branchId);
 
         return $preview;
     }
@@ -190,9 +192,11 @@ class CsvImportService
      * @param CsvRowData[] $rows
      * @return void
      */
-    public function syncDatabase(array $rows): void
+    public function syncDatabase(array $rows, ?int $branchId = null): void
     {
-        DB::transaction(function () use ($rows) {
+        $branchId ??= Branch::where('kode', 'PUSAT')->value('id');
+
+        DB::transaction(function () use ($rows, $branchId) {
             // 1. Sync Principals
             $principalsMap = []; // Cache to avoid multiple DB lookups
             
@@ -219,7 +223,7 @@ class CsvImportService
 
                 // We update the name/satuan/principal but keep the barcode unchanged
                 ItemMaster::updateOrCreate(
-                    ['kode_barang' => $row->itemKode],
+                    ['branch_id' => $branchId, 'kode_barang' => $row->itemKode],
                     [
                         'nama_barang' => $row->itemNama,
                         'principal_id' => $principalId,

@@ -6,6 +6,20 @@
 
     <div
         x-data="{
+            clock: '',
+            init() {
+                this.updateClock();
+                setInterval(() => this.updateClock(), 1000);
+            },
+            updateClock() {
+                this.clock = new Intl.DateTimeFormat('id-ID', {
+                    timeZone: 'Asia/Makassar',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                }).format(new Date()) + ' WITA';
+            },
             beep(frequency = 880, duration = 120) {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -74,6 +88,7 @@
                                     @endif
                                 </div>
                                 <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-500 sm:text-base">
+                                    <span>{{ $availableSession->branch?->nama ?? 'Tanpa Cabang' }}</span>
                                     <span>{{ $availableSession->checked_items }}/{{ $availableSession->total_items }} item</span>
                                     @if ($availableSession->mismatched_items > 0)
                                         <span class="text-danger-600">{{ $availableSession->mismatched_items }} selisih</span>
@@ -100,6 +115,12 @@
                     ? round(($session->checked_items / $session->total_items) * 100)
                     : 0;
             @endphp
+
+            <div class="flex justify-end">
+                <div class="rounded-md border border-gray-200 bg-white px-2.5 py-1 font-mono text-xs font-semibold text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400" x-text="clock">
+                    {{ now()->format('H:i:s') }} WITA
+                </div>
+            </div>
 
             @if (! $scannedItem)
             <x-filament::section>
@@ -343,6 +364,8 @@
                 </x-slot>
 
                 <x-slot name="description">
+                    {{ $session->branch?->nama ?? 'Tanpa Cabang' }}
+                    &bull;
                     {{ $session->checked_items }}/{{ $session->total_items }} item
                     &bull; {{ $session->matched_items }} sesuai
                     &bull; {{ $session->mismatched_items }} selisih
@@ -401,7 +424,7 @@
                                 <div class="min-w-0 flex-1">
                                     <div class="font-mono text-xs font-semibold text-danger-600 dark:text-danger-400">{{ $item->kode_barang }}</div>
                                     <div class="break-words text-base font-semibold text-gray-900 dark:text-white sm:text-lg">{{ $item->nama_barang }}</div>
-                                    <div class="text-sm text-gray-500">Sistem: {{ $item->qty_sistem_display }}</div>
+                                    <div class="text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</div>
                                 </div>
                                 <div class="shrink-0 text-right">
                                     <div class="font-mono text-lg font-bold text-danger-600 dark:text-danger-400">{{ $item->selisih }}</div>
@@ -448,7 +471,7 @@
                                 >
                                     <span class="block font-mono text-xs font-semibold text-primary-600 dark:text-primary-400">{{ $item->kode_barang }}</span>
                                     <span class="block break-words text-base text-gray-700 dark:text-gray-200">{{ $item->nama_barang }}</span>
-                                    <span class="block text-sm text-gray-500">Sistem: {{ $item->qty_sistem_display }}</span>
+                                    <span class="block text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</span>
                                 </button>
                                 <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
                                     <x-filament::button
@@ -536,7 +559,7 @@
                         <x-filament::section compact>
                             <x-slot name="heading">Qty Sistem</x-slot>
                             <div class="text-3xl font-black text-gray-900 dark:text-white">
-                                {{ $scannedItem->qty_sistem_display }}
+                                {{ $this->formatSystemQty($scannedItem) }}
                             </div>
                         </x-filament::section>
 

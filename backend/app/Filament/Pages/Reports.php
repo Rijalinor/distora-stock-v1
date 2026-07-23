@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\StockSessionItemStatus;
 use App\Filament\Widgets\ReportStatsOverview;
+use App\Models\Branch;
 use App\Models\Principal;
 use App\Models\StockSessionItem;
 use App\Services\ReportService;
@@ -44,11 +45,17 @@ class Reports extends Page implements HasTable
 
     public ?int $principalId = null;
 
-    protected $queryString = ['reportDate', 'principalId'];
+    public ?int $branchId = null;
+
+    protected $queryString = ['reportDate', 'principalId', 'branchId'];
 
     public function mount(): void
     {
         $this->reportDate = $this->reportDate ?: today()->toDateString();
+
+        if (Auth::user()?->isAdmin() && ! Auth::user()?->isCentralAdmin()) {
+            $this->branchId = Auth::user()?->branch_id;
+        }
     }
 
     public static function canAccess(): bool
@@ -62,6 +69,7 @@ class Reports extends Page implements HasTable
             ReportStatsOverview::make([
                 'date' => $this->reportDate ?: null,
                 'principalId' => $this->principalId,
+                'branchId' => $this->branchId,
             ]),
         ];
     }
@@ -72,7 +80,7 @@ class Reports extends Page implements HasTable
 
         return [
             Action::make('filterReport')
-                ->label($this->principalId ? "Filter: {$dateLabel}" : "Tanggal: {$dateLabel}")
+                ->label(($this->principalId || $this->branchId) ? "Filter: {$dateLabel}" : "Tanggal: {$dateLabel}")
                 ->icon('heroicon-m-funnel')
                 ->color('gray')
                 ->form([
@@ -87,10 +95,22 @@ class Reports extends Page implements HasTable
                         ->searchable()
                         ->preload()
                         ->placeholder('Semua principal'),
+                    Select::make('branchId')
+                        ->label('Cabang')
+                        ->options(fn () => Branch::query()->orderBy('nama')->pluck('nama', 'id'))
+                        ->default($this->branchId)
+                        ->disabled(fn () => Auth::user()?->isAdmin() && ! Auth::user()?->isCentralAdmin())
+                        ->dehydrated()
+                        ->searchable()
+                        ->preload()
+                        ->placeholder('Semua cabang'),
                 ])
                 ->action(function (array $data): void {
                     $this->reportDate = $data['reportDate'] ?: today()->toDateString();
                     $this->principalId = filled($data['principalId'] ?? null) ? (int) $data['principalId'] : null;
+                    $this->branchId = Auth::user()?->isCentralAdmin()
+                        ? (filled($data['branchId'] ?? null) ? (int) $data['branchId'] : null)
+                        : Auth::user()?->branch_id;
                 }),
 
             ActionGroup::make([
@@ -112,8 +132,8 @@ class Reports extends Page implements HasTable
 
     public function exportDailyCsv(): StreamedResponse
     {
-        $csv = app(ReportService::class)->buildDailyCsv($this->reportDate, $this->principalId);
-        $filename = 'laporan-harian-' . $this->reportDate . $this->principalFilenameSuffix() . '.csv';
+        $csv = app(ReportService::class)->buildDailyCsv($this->reportDate, $this->principalId, $this->branchId);
+        $filename = 'laporan-harian-' . $this->reportDate . $this->principalFilenameSuffix() . $this->branchFilenameSuffix() . '.csv';
 
         return response()->streamDownload(
             fn () => print($csv),
@@ -124,8 +144,8 @@ class Reports extends Page implements HasTable
 
     public function exportSelisihCsv(): StreamedResponse
     {
-        $csv = app(ReportService::class)->buildSelisihCsv($this->reportDate, $this->principalId);
-        $filename = 'selisih-' . $this->reportDate . $this->principalFilenameSuffix() . '.csv';
+        $csv = app(ReportService::class)->buildSelisihCsv($this->reportDate, $this->principalId, $this->branchId);
+        $filename = 'selisih-' . $this->reportDate . $this->principalFilenameSuffix() . $this->branchFilenameSuffix() . '.csv';
 
         return response()->streamDownload(
             fn () => print($csv),
@@ -149,8 +169,17 @@ class Reports extends Page implements HasTable
                         'stockSession',
                         fn (Builder $q) => $q->where('principal_id', $this->principalId)
                     ))
+                    ->when($this->branchId, fn (Builder $q) => $q->whereHas(
+                        'stockSession',
+                        fn (Builder $q) => $q->where('branch_id', $this->branchId)
+                    ))
             )
             ->columns([
+                TextColumn::make('stockSession.branch.nama')
+                    ->label('Cabang')
+                    ->placeholder('-')
+                    ->sortable(),
+
                 TextColumn::make('stockSession.principal.nama')
                     ->label('Principal')
                     ->sortable(),
@@ -193,6 +222,12 @@ class Reports extends Page implements HasTable
                     ->relationship('stockSession.principal', 'nama')
                     ->searchable()
                     ->preload(),
+
+                SelectFilter::make('branch')
+                    ->label('Cabang')
+                    ->relationship('stockSession.branch', 'nama')
+                    ->searchable()
+                    ->preload(),
             ]);
     }
 
@@ -205,5 +240,16 @@ class Reports extends Page implements HasTable
         $principal = Principal::find($this->principalId);
 
         return $principal ? '-' . str($principal->kode ?: $principal->nama)->slug() : '';
+    }
+
+    protected function branchFilenameSuffix(): string
+    {
+        if (! $this->branchId) {
+            return '';
+        }
+
+        $branch = Branch::find($this->branchId);
+
+        return $branch ? '-' . str($branch->kode ?: $branch->nama)->slug() : '';
     }
 }

@@ -8,18 +8,32 @@ use Illuminate\Support\Facades\Auth;
 
 class AuditLogService
 {
+    private const ENABLED_ACTIONS = [
+        'created',
+        'updated',
+        'deleted',
+        'stock_missing',
+        'stock_corrected',
+        'session_completed',
+        'session_closed_by_day',
+    ];
+
     public function log(string $action, Model $record, array $oldValues = [], array $newValues = []): void
     {
+        if (! in_array($action, self::ENABLED_ACTIONS, true)) {
+            return;
+        }
+
         AuditLog::create([
             'user_id' => Auth::id(),
             'action' => $action,
             'auditable_type' => $record::class,
             'auditable_id' => $record->getKey(),
             'auditable_label' => $this->labelFor($record),
-            'old_values' => $oldValues ?: null,
-            'new_values' => $newValues ?: null,
-            'ip_address' => request()?->ip(),
-            'user_agent' => request()?->userAgent(),
+            'old_values' => null,
+            'new_values' => null,
+            'ip_address' => null,
+            'user_agent' => null,
         ]);
     }
 

@@ -25,6 +25,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'branch_id',
         'mobile_api_token_hash',
         'mobile_api_token_created_at',
     ];
@@ -60,6 +61,11 @@ class User extends Authenticatable
         return $this->hasMany(CsvUpload::class, 'uploaded_by');
     }
 
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
     public function stockSessions()
     {
         return $this->hasMany(StockSession::class, 'assigned_to');
@@ -73,6 +79,16 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->role === UserRole::Admin;
+    }
+
+    public function isCentralAdmin(): bool
+    {
+        return $this->isAdmin() && ! $this->branch_id;
+    }
+
+    public function managesBranch(int|string|null $branchId): bool
+    {
+        return $this->isCentralAdmin() || ((int) $this->branch_id > 0 && (int) $this->branch_id === (int) $branchId);
     }
 
     public function isStockOfficer(): bool

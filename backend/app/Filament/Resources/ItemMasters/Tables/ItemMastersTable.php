@@ -11,13 +11,13 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use App\Models\ItemMaster;
 
 class ItemMastersTable
 {
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->withCount('itemsWithSameBarcode'))
             ->columns([
                 TextColumn::make('kode_barang')
                     ->searchable(),
@@ -26,11 +26,19 @@ class ItemMastersTable
                 TextColumn::make('items_with_same_barcode_count')
                     ->label('Duplikat')
                     ->badge()
-                    ->state(fn ($record) => blank($record->barcode) ? '-' : $record->items_with_same_barcode_count)
+                    ->state(fn ($record) => blank($record->barcode) ? '-' : ItemMaster::query()
+                        ->where('branch_id', $record->branch_id)
+                        ->where('barcode', $record->barcode)
+                        ->count())
                     ->color(fn ($state) => is_numeric($state) && $state > 1 ? 'warning' : 'gray')
                     ->formatStateUsing(fn ($state) => is_numeric($state) && $state > 1 ? "{$state} item" : '-'),
                 TextColumn::make('nama_barang')
                     ->searchable(),
+                TextColumn::make('branch.nama')
+                    ->label('Cabang')
+                    ->placeholder('-')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('principal.nama')
                     ->label('Principal')
                     ->searchable()
@@ -59,6 +67,7 @@ class ItemMastersTable
                                 ->select(DB::raw(1))
                                 ->from('item_masters as duplicates')
                                 ->whereColumn('duplicates.barcode', 'item_masters.barcode')
+                                ->whereColumn('duplicates.branch_id', 'item_masters.branch_id')
                                 ->whereColumn('duplicates.id', '!=', 'item_masters.id');
                         })),
             ])

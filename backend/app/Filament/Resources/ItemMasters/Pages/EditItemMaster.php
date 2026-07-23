@@ -7,6 +7,7 @@ use App\Services\AuditLogService;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 
 class EditItemMaster extends EditRecord
 {
@@ -21,6 +22,7 @@ class EditItemMaster extends EditRecord
                     $record,
                     $record->only([
                         'kode_barang',
+                        'branch_id',
                         'barcode',
                         'nama_barang',
                         'principal_id',
@@ -35,8 +37,15 @@ class EditItemMaster extends EditRecord
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
+        $user = Auth::user();
+
+        if ($user?->isAdmin() && ! $user->isCentralAdmin()) {
+            $data['branch_id'] = $user->branch_id;
+        }
+
         $before = $record->only([
             'kode_barang',
+            'branch_id',
             'barcode',
             'nama_barang',
             'principal_id',

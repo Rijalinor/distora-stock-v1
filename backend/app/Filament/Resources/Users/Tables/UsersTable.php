@@ -34,6 +34,11 @@ class UsersTable
                         UserRole::StockOfficer => 'info',
                     }),
 
+                TextColumn::make('branch.nama')
+                    ->label('Cabang')
+                    ->placeholder('-')
+                    ->searchable(),
+
                 TextColumn::make('stockSessions_count')
                     ->label('Sesi')
                     ->counts('stockSessions')

@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Enums\StockSessionItemStatus;
 use App\Enums\StockSessionStatus;
 use App\Enums\UserRole;
+use App\Models\Branch;
 use App\Models\ItemMaster;
 use App\Models\Principal;
 use App\Models\StockSession;
@@ -20,11 +21,36 @@ class MobileApiTest extends TestCase
 
     public function test_mobile_login_sessions_and_scan_flow(): void
     {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+
+        $otherBranch = Branch::create([
+            'kode' => 'CBG2',
+            'nama' => 'Cabang 2',
+            'status' => true,
+        ]);
+
         $user = User::factory()->create([
             'name' => 'Officer',
             'email' => 'officer1@distora.com',
             'password' => Hash::make('password'),
             'role' => UserRole::StockOfficer,
+            'branch_id' => $branch->id,
+        ]);
+
+        $secondOfficer = User::factory()->create([
+            'name' => 'Officer 2',
+            'email' => 'officer2@distora.com',
+            'password' => Hash::make('password'),
+            'role' => UserRole::StockOfficer,
+            'branch_id' => $branch->id,
+        ]);
+
+        $otherBranchOfficer = User::factory()->create([
+            'name' => 'Officer 3',
+            'email' => 'officer3@distora.com',
+            'password' => Hash::make('password'),
+            'role' => UserRole::StockOfficer,
+            'branch_id' => $otherBranch->id,
         ]);
 
         $principal = Principal::create([
@@ -34,6 +60,7 @@ class MobileApiTest extends TestCase
         ]);
 
         $itemMaster = ItemMaster::create([
+            'branch_id' => $branch->id,
             'kode_barang' => '696743',
             'barcode' => '888724',
             'nama_barang' => 'BAYGON COIL (1X36)',
@@ -44,6 +71,7 @@ class MobileApiTest extends TestCase
 
         $session = StockSession::create([
             'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
             'session_date' => today(),
             'assigned_to' => $user->id,
             'status' => StockSessionStatus::Open,
@@ -104,5 +132,43 @@ class MobileApiTest extends TestCase
             'qty_aktual_base' => 36,
             'status' => StockSessionItemStatus::Matched->value,
         ]);
+
+        $secondLogin = $this->postJson('/api/mobile/login', [
+            'email' => 'officer2@distora.com',
+            'password' => 'password',
+        ]);
+
+        $secondToken = $secondLogin->json('token');
+
+        $this->getJson('/api/mobile/sessions', [
+            'Authorization' => "Bearer {$secondToken}",
+        ])->assertOk()
+            ->assertJsonPath('data.0.id', $session->id);
+
+        $this->postJson('/api/mobile/sessions/' . $session->id . '/scan', [
+            'barcode' => '888724',
+            'qty_levels' => [1, 0],
+        ], [
+            'Authorization' => "Bearer {$secondToken}",
+        ])->assertOk();
+
+        $otherLogin = $this->postJson('/api/mobile/login', [
+            'email' => 'officer3@distora.com',
+            'password' => 'password',
+        ]);
+
+        $otherToken = $otherLogin->json('token');
+
+        $this->getJson('/api/mobile/sessions', [
+            'Authorization' => "Bearer {$otherToken}",
+        ])->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->postJson('/api/mobile/sessions/' . $session->id . '/scan', [
+            'barcode' => '888724',
+            'qty_levels' => [1, 0],
+        ], [
+            'Authorization' => "Bearer {$otherToken}",
+        ])->assertForbidden();
     }
 }

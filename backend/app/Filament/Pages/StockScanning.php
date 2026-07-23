@@ -74,15 +74,14 @@ class StockScanning extends Page
     public function getAvailableSessions()
     {
         $query = StockSession::query()
-            ->with('principal')
+            ->with(['principal', 'branch'])
             ->whereDate('session_date', today())
             ->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress]);
 
-        if (Auth::user()?->isStockOfficer()) {
-            $query->where(function ($q) {
-                $q->whereNull('assigned_to')
-                    ->orWhere('assigned_to', Auth::id());
-            });
+        $user = Auth::user();
+
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id) {
+            $query->where('branch_id', $user->branch_id);
         }
 
         return $query->orderBy('principal_id')->get();
@@ -93,15 +92,6 @@ class StockScanning extends Page
         $session = StockSession::with('principal')->findOrFail($sessionId);
 
         if (Auth::user()?->isStockOfficer()) {
-            if ($session->assigned_to && $session->assigned_to !== Auth::id()) {
-                Notification::make()
-                    ->title('Sesi sudah dikerjakan petugas lain')
-                    ->danger()
-                    ->send();
-
-                return;
-            }
-
             if (! $session->assigned_to) {
                 app(StockSessionService::class)->assignOfficer($session, Auth::user());
             }
@@ -157,7 +147,7 @@ class StockScanning extends Page
                     'id' => $item->id,
                     'code' => $item->kode_barang,
                     'name' => $item->nama_barang,
-                    'system_qty' => $item->qty_sistem_display,
+                    'system_qty' => $this->formatSystemQty($item),
                     'status' => $item->status->value,
                 ])
                 ->values()
@@ -393,6 +383,11 @@ class StockScanning extends Page
         return $this->getQtyLabelsForItem($this->scannedItem);
     }
 
+    public function formatSystemQty(StockSessionItem $item): string
+    {
+        return app(\App\Services\ReportService::class)->formatBaseQty($item->qty_sistem_base, $item);
+    }
+
     protected function prepareQtyLevels(StockSessionItem $item): void
     {
         $factors = $this->getQtyFactorsForItem($item);
@@ -481,16 +476,18 @@ class StockScanning extends Page
             return false;
         }
 
-        if (Auth::user()?->isStockOfficer() && $session->assigned_to && $session->assigned_to !== Auth::id()) {
-            Notification::make()
-                ->title('Akses ditolak')
-                ->body('Sesi ini dipakai petugas lain.')
-                ->danger()
-                ->send();
+        $user = Auth::user();
 
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id && $session->branch_id !== $user->branch_id) {
             $this->selectedSessionId = null;
             session()->forget(self::SESSION_KEY);
             $this->resetScanState();
+
+            Notification::make()
+                ->title('Akses cabang ditolak')
+                ->body('Sesi ini bukan cabang Anda.')
+                ->danger()
+                ->send();
 
             return false;
         }
