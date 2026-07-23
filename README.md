@@ -90,6 +90,13 @@ Contoh struktur `CTN-PCK-PCS`:
 | Admin Cabang | Item master cabang sendiri, upload stok cabang, sesi cabang, laporan cabang |
 | Stock Officer | Scan barcode dan update item pada sesi cabangnya |
 
+## Password User
+
+- Semua user bisa mengganti password sendiri dari menu **Ganti Password**.
+- Password lama wajib diisi saat user mengganti password sendiri.
+- Admin pusat bisa reset password user dari menu **Pengguna** dengan mengisi field password baru.
+- Jika field password di form edit pengguna dikosongkan, password lama tidak berubah.
+
 ## Struktur Cabang
 
 Sistem mendukung pemakaian multi cabang. Admin pusat bisa melihat semua data
