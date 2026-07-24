@@ -1,12 +1,4 @@
 <x-filament::section>
-    <x-slot name="heading">
-        Scan Barcode
-    </x-slot>
-
-    <x-slot name="description">
-        Buka halaman opname dan langsung mulai scan barcode.
-    </x-slot>
-
     <div
         x-data="{
             deferredPrompt: null,
@@ -47,41 +39,75 @@
             },
         }"
         x-init="init()"
-        class="space-y-4"
+        class="distora-dashboard-hero"
     >
-        <div class="flex items-center justify-between gap-4">
-            <div class="min-w-0">
-                <div class="text-sm text-gray-500 dark:text-gray-400">
-                    Menu utama untuk petugas stock opname.
-                </div>
+        <div class="distora-dashboard-hero__content">
+            <div class="distora-dashboard-hero__eyebrow">
+                Stock Opname
             </div>
 
+            <h2 class="distora-dashboard-hero__title">
+                Mulai scan barcode barang
+            </h2>
+
+            <p class="distora-dashboard-hero__copy">
+                Pilih sesi yang ditugaskan, scan barcode, lalu input qty aktual sesuai hasil hitung fisik.
+            </p>
+        </div>
+
+        <div class="distora-dashboard-hero__actions">
             <x-filament::button
                 tag="a"
                 href="{{ $url }}"
-                size="lg"
+                size="xl"
                 icon="heroicon-m-qr-code"
             >
                 Buka Scan
             </x-filament::button>
+
+            <x-filament::button
+                tag="a"
+                href="{{ url('/admin/reports') }}"
+                color="gray"
+                icon="heroicon-m-document-chart-bar"
+            >
+                Laporan
+            </x-filament::button>
+
+            @if (auth()->user()?->isAdmin())
+                <x-filament::button
+                    tag="a"
+                    href="{{ url('/admin/stock-sessions') }}"
+                    color="gray"
+                    icon="heroicon-m-clipboard-document-list"
+                >
+                    Sesi
+                </x-filament::button>
+
+                <x-filament::button
+                    tag="a"
+                    href="{{ url('/admin/csv-uploads') }}"
+                    color="gray"
+                    icon="heroicon-m-arrow-up-tray"
+                >
+                    Upload CSV
+                </x-filament::button>
+            @endif
         </div>
 
-        <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/5">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="text-xs text-gray-500 dark:text-gray-400" x-text="installStatus"></div>
+        <div class="distora-dashboard-pwa">
+            <div class="distora-dashboard-pwa__status" x-text="installStatus"></div>
 
-                <button
-                    type="button"
-                    x-on:click="install()"
-                    class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition"
-                    :class="canInstall
-                        ? 'bg-primary-500 text-white hover:bg-primary-600'
-                        : 'bg-gray-900 text-white hover:bg-gray-700 dark:bg-white/10 dark:text-white'"
-                >
-                    Coba Pasang PWA
-                </button>
-            </div>
-            <div class="mt-3 text-xs text-gray-500 dark:text-gray-400" x-show="triedAutoInstall">
+            <button
+                type="button"
+                x-on:click="install()"
+                class="distora-dashboard-pwa__button"
+                :class="canInstall ? 'is-ready' : ''"
+            >
+                Pasang PWA
+            </button>
+
+            <div class="distora-dashboard-pwa__hint" x-show="triedAutoInstall">
                 Kalau browser belum memberi prompt, buka menu Chrome lalu pilih <strong>Install app</strong> atau <strong>Install Distora Stock</strong>.
             </div>
         </div>

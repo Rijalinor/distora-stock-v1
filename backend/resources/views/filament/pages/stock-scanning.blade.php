@@ -55,7 +55,7 @@
         x-on:stock-item-scanned.window="feedbackSuccess()"
         x-on:stock-scan-failed.window="feedbackError()"
         x-on:stock-scan-ready.window="focusBarcode()"
-        class="mx-auto w-full max-w-5xl space-y-6 px-3 sm:px-0"
+        class="distora-scan-page mx-auto w-full max-w-5xl space-y-4 px-0 sm:space-y-6 sm:px-0"
     >
         @if (! $session)
             <x-filament::section>
@@ -115,12 +115,6 @@
                     ? round(($session->checked_items / $session->total_items) * 100)
                     : 0;
             @endphp
-
-            <div class="flex justify-end">
-                <div class="rounded-md border border-gray-200 bg-white px-2.5 py-1 font-mono text-xs font-semibold text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400" x-text="clock">
-                    {{ now()->format('H:i:s') }} WITA
-                </div>
-            </div>
 
             @if (! $scannedItem)
             <x-filament::section>
@@ -231,6 +225,14 @@
                                 this.status = 'Gagal mengatur lampu kamera';
                             }
                         },
+                        toggleCamera() {
+                            if (this.scanning) {
+                                this.stopCamera();
+                                return;
+                            }
+
+                            this.initCamera();
+                        },
                         stopCamera() {
                             this.scanning = false;
                             this.torchOn = false;
@@ -251,26 +253,28 @@
                     x-on:barcode-detected.window="$wire.scanBarcode($event.detail.value)"
                     class="space-y-5"
                 >
-                    <div class="grid gap-3 sm:grid-cols-3">
-                        <x-filament::button type="button" size="xl" color="primary" x-on:click="initCamera()">
-                            Aktifkan Kamera
-                        </x-filament::button>
-
-                        <x-filament::button type="button" size="xl" color="warning" x-on:click="toggleTorch()">
-                            Lampu
-                        </x-filament::button>
-
-                        <x-filament::button type="button" size="xl" color="gray" x-on:click="stopCamera()">
-                            Matikan Kamera
-                        </x-filament::button>
-                    </div>
-
                     <div class="overflow-hidden rounded-xl border border-gray-200 bg-gray-950 shadow-sm ring-1 ring-black/5 dark:border-gray-700 dark:ring-white/10">
                         <video x-ref="video" class="aspect-[4/3] w-full bg-black object-cover sm:aspect-video" playsinline muted></video>
                         <div class="flex items-center gap-2 border-t border-white/10 px-4 py-3 text-sm text-gray-200 sm:text-base">
                             <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
                             <span x-text="status"></span>
                         </div>
+                    </div>
+
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <x-filament::button
+                            type="button"
+                            size="xl"
+                            color="primary"
+                            icon="heroicon-m-camera"
+                            x-on:click="toggleCamera()"
+                        >
+                            <span x-text="scanning ? 'Matikan Kamera' : 'Aktifkan Kamera'"></span>
+                        </x-filament::button>
+
+                        <x-filament::button type="button" size="xl" color="warning" icon="heroicon-m-light-bulb" x-on:click="toggleTorch()">
+                            Lampu
+                        </x-filament::button>
                     </div>
 
                     <form wire:submit="scanBarcode" class="grid gap-3 sm:grid-cols-[1fr_auto]">
@@ -341,16 +345,18 @@
 
                 <div class="grid gap-2">
                     @foreach ($recentScans as $scan)
-                        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                        <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900">
                             <div class="min-w-0">
-                                <div class="truncate font-semibold text-gray-900 dark:text-white">{{ $scan['name'] }}</div>
-                                <div class="text-xs text-gray-500">{{ $scan['code'] }} &bull; {{ $scan['at'] }}</div>
+                                <div class="break-words font-semibold leading-snug text-gray-900 dark:text-white">{{ $scan['name'] }}</div>
+                                <div class="mt-1 text-xs text-gray-500">{{ $scan['code'] }} &bull; {{ $scan['at'] }}</div>
                             </div>
-                            <x-filament::badge
-                                :color="$scan['status'] === 'matched' ? 'success' : ($scan['status'] === 'pending' ? 'gray' : 'warning')"
-                            >
-                                {{ $scan['status'] }}
-                            </x-filament::badge>
+                            <div class="mt-3">
+                                <x-filament::badge
+                                    :color="$scan['status'] === 'matched' ? 'success' : ($scan['status'] === 'pending' ? 'gray' : 'warning')"
+                                >
+                                    {{ $scan['status'] }}
+                                </x-filament::badge>
+                            </div>
                         </div>
                     @endforeach
                 </div>
@@ -369,6 +375,8 @@
                     {{ $session->checked_items }}/{{ $session->total_items }} item
                     &bull; {{ $session->matched_items }} sesuai
                     &bull; {{ $session->mismatched_items }} selisih
+                    &bull;
+                    <span class="font-mono" x-text="clock">{{ now()->format('H:i:s') }} WITA</span>
                 </x-slot>
 
                 <x-slot name="headerEnd">
@@ -419,16 +427,22 @@
                             <button
                                 type="button"
                                 wire:click="startEditItem({{ $item->id }})"
-                                class="flex w-full items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-danger-400 hover:bg-danger-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-danger-500 dark:hover:bg-danger-950/10"
+                                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-danger-400 hover:bg-danger-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-danger-500 dark:hover:bg-danger-950/10"
                             >
-                                <div class="min-w-0 flex-1">
+                                <div class="min-w-0">
                                     <div class="font-mono text-xs font-semibold text-danger-600 dark:text-danger-400">{{ $item->kode_barang }}</div>
-                                    <div class="break-words text-base font-semibold text-gray-900 dark:text-white sm:text-lg">{{ $item->nama_barang }}</div>
-                                    <div class="text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</div>
+                                    <div class="mt-1 break-words text-base font-semibold leading-snug text-gray-900 dark:text-white sm:text-lg">{{ $item->nama_barang }}</div>
+                                    <div class="mt-1 text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</div>
                                 </div>
-                                <div class="shrink-0 text-right">
-                                    <div class="font-mono text-lg font-bold text-danger-600 dark:text-danger-400">{{ $item->selisih }}</div>
-                                    <div class="text-sm text-gray-500">Koreksi</div>
+                                <div class="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-white/10">
+                                    <div>
+                                        <div class="text-xs text-gray-500">Selisih</div>
+                                        <div class="font-mono text-lg font-bold text-danger-600 dark:text-danger-400">{{ $item->selisih }}</div>
+                                    </div>
+                                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-2 text-sm font-semibold text-danger-700 dark:bg-danger-950/30 dark:text-danger-300">
+                                        Koreksi
+                                        <x-filament::icon icon="heroicon-m-pencil-square" class="h-4 w-4" />
+                                    </span>
                                 </div>
                             </button>
                         @endforeach
@@ -462,31 +476,37 @@
 
                     <div class="grid gap-2">
                         @forelse ($filteredPendingItems->take(25) as $item)
-                            <div class="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                                <x-filament::icon icon="heroicon-m-cube" class="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+                            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900 sm:p-4">
                                 <button
                                     type="button"
                                     wire:click="startEditItem({{ $item->id }})"
-                                    class="min-w-0 flex-1 text-left"
+                                    class="flex w-full items-start gap-3 text-left"
                                 >
-                                    <span class="block font-mono text-xs font-semibold text-primary-600 dark:text-primary-400">{{ $item->kode_barang }}</span>
-                                    <span class="block break-words text-base text-gray-700 dark:text-gray-200">{{ $item->nama_barang }}</span>
-                                    <span class="block text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</span>
+                                    <x-filament::icon icon="heroicon-m-cube" class="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block font-mono text-xs font-semibold text-primary-600 dark:text-primary-400">{{ $item->kode_barang }}</span>
+                                        <span class="mt-1 block break-words text-base font-semibold leading-snug text-gray-900 dark:text-white">{{ $item->nama_barang }}</span>
+                                        <span class="mt-1 block text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</span>
+                                    </span>
                                 </button>
-                                <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
+
+                                <div class="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-white/10">
                                     <x-filament::button
                                         type="button"
-                                        size="sm"
+                                        size="lg"
                                         color="primary"
+                                        icon="heroicon-m-pencil-square"
+                                        class="w-full"
                                         wire:click="startEditItem({{ $item->id }})"
                                     >
                                         Edit
                                     </x-filament::button>
                                     <x-filament::button
                                         type="button"
-                                        size="sm"
+                                        size="lg"
                                         color="gray"
                                         icon="heroicon-m-eye-slash"
+                                        class="w-full"
                                         x-data
                                         x-on:click.prevent="if (confirm('Tandai item ini tidak ada fisik?')) { $wire.markItemMissing({{ $item->id }}) }"
                                     >

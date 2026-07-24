@@ -4,6 +4,7 @@
 @source '../../../../app/Filament/Resources/**/*';
 @source '../../../../app/Filament/Widgets/**/*';
 @source '../../../../resources/views/filament/pages/**/*';
+@source '../../../../resources/views/filament/widgets/**/*';
 
 @layer base {
     :root {
@@ -78,5 +79,155 @@
 
     .fi-badge {
         border-radius: 999px;
+    }
+
+    .fi-wi-stats-overview-stat {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .fi-wi-stats-overview-stat::before {
+        position: absolute;
+        inset-inline: 0;
+        top: 0;
+        height: 3px;
+        content: '';
+        background: linear-gradient(90deg, rgb(245 158 11), rgb(14 165 233));
+        opacity: 0.75;
+    }
+
+    .distora-dashboard-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .distora-dashboard-hero__content {
+        max-width: 42rem;
+        min-width: 0;
+    }
+
+    .distora-dashboard-hero__eyebrow {
+        margin-bottom: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+        color: rgb(217 119 6);
+    }
+
+    .dark .distora-dashboard-hero__eyebrow {
+        color: rgb(251 191 36);
+    }
+
+    .distora-dashboard-hero__title {
+        margin: 0;
+        font-size: clamp(1.25rem, 2vw, 1.875rem);
+        font-weight: 750;
+        line-height: 1.2;
+        color: rgb(var(--distora-ink));
+    }
+
+    .distora-dashboard-hero__copy {
+        margin-top: 0.625rem;
+        max-width: 34rem;
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        color: rgb(82 82 91);
+    }
+
+    .dark .distora-dashboard-hero__copy {
+        color: rgb(212 212 216);
+    }
+
+    .distora-dashboard-hero__actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 0.625rem;
+    }
+
+    .distora-dashboard-pwa {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        border: 1px solid rgb(var(--distora-line));
+        border-radius: 0.625rem;
+        background: rgb(var(--distora-soft));
+        padding: 0.875rem 1rem;
+    }
+
+    .distora-dashboard-pwa__status,
+    .distora-dashboard-pwa__hint {
+        font-size: 0.8125rem;
+        line-height: 1.5;
+        color: rgb(82 82 91);
+    }
+
+    .dark .distora-dashboard-pwa__status,
+    .dark .distora-dashboard-pwa__hint {
+        color: rgb(212 212 216);
+    }
+
+    .distora-dashboard-pwa__button {
+        flex: none;
+        border-radius: 0.625rem;
+        background: rgb(39 39 42);
+        padding: 0.5rem 0.875rem;
+        font-size: 0.8125rem;
+        font-weight: 700;
+        color: white;
+        transition: background-color 150ms ease;
+    }
+
+    .distora-dashboard-pwa__button:hover {
+        background: rgb(63 63 70);
+    }
+
+    .distora-dashboard-pwa__button.is-ready {
+        background: rgb(217 119 6);
+    }
+
+    .distora-dashboard-pwa__button.is-ready:hover {
+        background: rgb(180 83 9);
+    }
+
+    @media (max-width: 640px) {
+        .fi-main {
+            padding-inline: 0;
+            padding-top: 0.5rem;
+        }
+
+        .fi-header:has(.fi-header-heading:empty) {
+            display: none;
+        }
+
+        .fi-header-heading {
+            font-size: 1.25rem;
+            line-height: 1.25;
+        }
+
+        .distora-scan-page .fi-section {
+            border-inline-width: 0;
+            border-radius: 0;
+            box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+        }
+
+        .distora-dashboard-hero {
+            align-items: stretch;
+            grid-template-columns: 1fr;
+        }
+
+        .distora-dashboard-hero__actions {
+            justify-content: flex-start;
+        }
+
+        .distora-dashboard-pwa {
+            align-items: stretch;
+            flex-direction: column;
+        }
     }
 }

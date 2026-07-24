@@ -23,7 +23,7 @@ class StockScanning extends Page
 
     protected static ?string $navigationLabel = 'Scan Barcode';
 
-    protected static ?string $title = 'Stock Opname';
+    protected static ?string $title = '';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Operasional';
 

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Widgets\DashboardStatsOverview;
 use App\Filament\Widgets\ScanBarcodeShortcut;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Support\Facades\Auth;
@@ -19,6 +20,7 @@ class Dashboard extends BaseDashboard
     {
         return [
             ScanBarcodeShortcut::class,
+            DashboardStatsOverview::class,
         ];
     }
 }
