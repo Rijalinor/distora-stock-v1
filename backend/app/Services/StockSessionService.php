@@ -107,19 +107,27 @@ class StockSessionService
             'started_at' => $session->started_at?->toDateTimeString(),
         ];
 
-        $data = [
-            'assigned_to' => $officer->id,
-        ];
+        $data = [];
+
+        if (! $session->assigned_to) {
+            $data['assigned_to'] = $officer->id;
+        }
 
         if ($session->status === StockSessionStatus::Open) {
             $data['status'] = StockSessionStatus::InProgress;
             $data['started_at'] = now();
         }
 
-        $session->update($data);
+        if ($data) {
+            $session->update($data);
+        }
+
+        $session->officers()->syncWithoutDetaching([$officer->id]);
+        $session->refresh();
 
         app(AuditLogService::class)->log('session_assigned', $session, $before, [
             'assigned_to' => $session->assigned_to,
+            'officer_ids' => $session->officers()->pluck('users.id')->all(),
             'status' => $session->status?->value,
             'started_at' => $session->started_at?->toDateTimeString(),
         ]);

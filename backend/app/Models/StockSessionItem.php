@@ -21,6 +21,8 @@ class StockSessionItem extends Model
         'status',
         'checked_by',
         'checked_at',
+        'locked_by',
+        'locked_at',
     ];
 
     protected function casts(): array
@@ -28,6 +30,7 @@ class StockSessionItem extends Model
         return [
             'status' => StockSessionItemStatus::class,
             'checked_at' => 'datetime',
+            'locked_at' => 'datetime',
         ];
     }
 
@@ -44,6 +47,11 @@ class StockSessionItem extends Model
     public function checkedBy()
     {
         return $this->belongsTo(User::class, 'checked_by');
+    }
+
+    public function lockedBy()
+    {
+        return $this->belongsTo(User::class, 'locked_by');
     }
 
     public function adjustmentLogs()

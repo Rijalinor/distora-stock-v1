@@ -11,6 +11,7 @@ use App\Models\Branch;
 use App\Models\CsvUpload;
 use App\Models\ItemMaster;
 use App\Models\Principal;
+use App\Models\StockFoundItem;
 use App\Models\StockSession;
 use App\Models\StockSessionItem;
 use App\Models\User;
@@ -161,6 +162,10 @@ class StockOpnameServicesTest extends TestCase
         $sessionService->assignOfficer($johnsonSession, $officer);
         $this->assertEquals(StockSessionStatus::InProgress, $johnsonSession->fresh()->status);
         $this->assertEquals($officer->id, $johnsonSession->fresh()->assigned_to);
+        $this->assertDatabaseHas('stock_session_user', [
+            'stock_session_id' => $johnsonSession->id,
+            'user_id' => $officer->id,
+        ]);
 
         // 5. Scan & Record stock (Matched case)
         $scanningService = new StockScanningService($sessionService);
@@ -227,6 +232,51 @@ class StockOpnameServicesTest extends TestCase
         // 8. Complete session
         $sessionService->completeSession($johnsonSession);
         $this->assertEquals(StockSessionStatus::Completed, $johnsonSession->fresh()->status);
+    }
+
+    /** @test */
+    public function it_allows_multiple_officers_on_one_session_and_locks_one_item_at_a_time()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'LOCK',
+            'nama' => 'Principal Lock',
+            'status' => true,
+        ]);
+        $firstOfficer = User::factory()->create(['role' => UserRole::StockOfficer]);
+        $secondOfficer = User::factory()->create(['role' => UserRole::StockOfficer]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::Open,
+            'total_items' => 1,
+        ]);
+        $item = StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'kode_barang' => 'LOCK-ITEM',
+            'nama_barang' => 'Barang Lock',
+            'satuan' => 'PCS',
+            'qty_sistem_display' => '1 PCS',
+            'qty_sistem_base' => 1,
+            'status' => StockSessionItemStatus::Pending,
+        ]);
+
+        $sessionService = app(StockSessionService::class);
+        $sessionService->assignOfficer($session, $firstOfficer);
+        $sessionService->assignOfficer($session->fresh(), $secondOfficer);
+
+        $this->assertEquals($firstOfficer->id, $session->fresh()->assigned_to);
+        $this->assertEqualsCanonicalizing(
+            [$firstOfficer->id, $secondOfficer->id],
+            $session->fresh()->officers()->pluck('users.id')->all()
+        );
+
+        $scanningService = app(StockScanningService::class);
+        $scanningService->acquireLock($item, $firstOfficer);
+
+        $this->expectException(\RuntimeException::class);
+        $scanningService->acquireLock($item->fresh(), $secondOfficer);
     }
 
     /** @test */
@@ -590,6 +640,94 @@ class StockOpnameServicesTest extends TestCase
         $this->assertStringContainsString('-15 PCS', $sessionCsv);
         $this->assertStringContainsString('"=""ITEM-R"""', $selisihCsv);
         $this->assertStringContainsString('-15 PCS', $selisihCsv);
+    }
+
+    /** @test */
+    public function it_compares_discrepancies_between_two_dates()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'PCMP',
+            'nama' => 'Principal Compare',
+            'status' => true,
+        ]);
+
+        foreach (['2026-07-04' => -2, '2026-07-05' => -3] as $date => $selisih) {
+            $session = StockSession::create([
+                'principal_id' => $principal->id,
+                'branch_id' => $branch->id,
+                'session_date' => $date,
+                'status' => StockSessionStatus::Completed,
+                'total_items' => 1,
+                'checked_items' => 1,
+                'mismatched_items' => 1,
+            ]);
+
+            StockSessionItem::create([
+                'stock_session_id' => $session->id,
+                'kode_barang' => 'ITEM-COMPARE',
+                'nama_barang' => 'Barang Compare',
+                'satuan' => 'PCS',
+                'qty_sistem_display' => '10 PCS',
+                'qty_sistem_base' => 10,
+                'qty_aktual_display' => (10 + $selisih) . ' PCS',
+                'qty_aktual_base' => 10 + $selisih,
+                'selisih' => $selisih,
+                'status' => StockSessionItemStatus::Mismatched,
+            ]);
+        }
+
+        $rows = app(ReportService::class)->getSelisihComparison('2026-07-04', '2026-07-05');
+        $row = $rows->first();
+
+        $this->assertCount(1, $rows);
+        $this->assertEquals(-2, $row['from_selisih']);
+        $this->assertEquals(-3, $row['to_selisih']);
+        $this->assertEquals(-1, $row['change']);
+        $this->assertEquals('Selisih Memburuk', $row['status']);
+
+        $csv = app(ReportService::class)->buildSelisihComparisonCsv('2026-07-04', '2026-07-05');
+        $this->assertStringContainsString('Perubahan', $csv);
+        $this->assertStringContainsString('Selisih Memburuk', $csv);
+    }
+
+    /** @test */
+    public function it_includes_found_items_in_selisih_csv()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'FOUND',
+            'nama' => 'Principal Found',
+            'status' => true,
+        ]);
+        $officer = User::factory()->create(['role' => UserRole::StockOfficer]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => '2026-07-25',
+            'status' => StockSessionStatus::InProgress,
+            'total_items' => 1,
+        ]);
+
+        StockFoundItem::create([
+            'stock_session_id' => $session->id,
+            'kode_barang' => 'FOUND-001',
+            'barcode' => '899FOUND',
+            'nama_barang' => 'Barang Temuan',
+            'satuan' => 'PCS',
+            'qty_aktual_display' => '3 PCS',
+            'qty_aktual_base' => 3,
+            'status' => 'unresolved',
+            'note' => 'Dugaan tertukar',
+            'found_by' => $officer->id,
+            'found_at' => '2026-07-25 10:00:00',
+        ]);
+
+        $csv = app(ReportService::class)->buildSelisihCsv('2026-07-25');
+
+        $this->assertStringContainsString('Barang Temuan', $csv);
+        $this->assertStringContainsString('"=""FOUND-001"""', $csv);
+        $this->assertStringContainsString('3 PCS', $csv);
     }
 
     /** @test */

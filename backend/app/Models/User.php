@@ -7,10 +7,12 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 
 use App\Enums\UserRole;
 
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -71,6 +73,11 @@ class User extends Authenticatable
         return $this->hasMany(StockSession::class, 'assigned_to');
     }
 
+    public function assignedStockSessions()
+    {
+        return $this->belongsToMany(StockSession::class)->withTimestamps();
+    }
+
     public function stockAdjustmentLogs()
     {
         return $this->hasMany(StockAdjustmentLog::class, 'adjusted_by');
@@ -114,5 +121,9 @@ class User extends Authenticatable
             'mobile_api_token_hash' => null,
             'mobile_api_token_created_at' => null,
         ])->save();
+    }
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $this->isAdmin() || $this->isStockOfficer();
     }
 }

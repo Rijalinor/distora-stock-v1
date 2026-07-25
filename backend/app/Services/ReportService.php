@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\StockSessionItemStatus;
 use App\Models\StockSession;
+use App\Models\StockFoundItem;
 use App\Models\StockSessionItem;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -184,12 +185,14 @@ class ReportService
     public function buildSelisihCsv(?string $date = null, ?int $principalId = null, ?int $branchId = null): string
     {
         $items = $this->getAllSelisihItems($date, $principalId, $branchId);
+        $foundItems = $this->getFoundItems($date, $principalId, $branchId);
 
         $lines = [];
         $lines[] = implode(',', [
             'Tanggal',
             'Cabang',
             'Principal',
+            'Tipe',
             'Kode Barang',
             'Nama Barang',
             'Qty Sistem',
@@ -207,6 +210,7 @@ class ReportService
                     $session?->session_date?->format('Y-m-d') ?? '-',
                     $session?->branch?->nama ?? '-',
                     $session?->principal?->nama ?? '-',
+                    'Selisih Sistem',
                     $this->excelText($item->kode_barang),
                     $item->nama_barang,
                     $item->qty_sistem_display,
@@ -214,6 +218,138 @@ class ReportService
                     $this->formatBaseQty($item->selisih, $item),
                     $item->checkedBy?->name ?? '-',
                     $item->checked_at?->format('Y-m-d H:i') ?? '-',
+                ]
+            ));
+        }
+
+        foreach ($foundItems as $item) {
+            $session = $item->stockSession;
+            $lines[] = implode(',', array_map(
+                fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
+                [
+                    $session?->session_date?->format('Y-m-d') ?? '-',
+                    $session?->branch?->nama ?? '-',
+                    $session?->principal?->nama ?? '-',
+                    'Barang Temuan',
+                    $this->excelText($item->kode_barang),
+                    $item->nama_barang,
+                    '0',
+                    $item->qty_aktual_display,
+                    $item->qty_aktual_display,
+                    $item->foundBy?->name ?? '-',
+                    $item->found_at?->format('Y-m-d H:i') ?? '-',
+                ]
+            ));
+        }
+
+        return implode("\n", $lines);
+    }
+
+    public function getFoundItems(?string $date = null, ?int $principalId = null, ?int $branchId = null): Collection
+    {
+        return StockFoundItem::query()
+            ->with(['stockSession.branch', 'stockSession.principal', 'foundBy'])
+            ->when($date, fn ($q) => $q->whereHas(
+                'stockSession',
+                fn ($q) => $q->whereDate('session_date', $date)
+            ))
+            ->when($principalId, fn ($q) => $q->whereHas(
+                'stockSession',
+                fn ($q) => $q->where('principal_id', $principalId)
+            ))
+            ->when($branchId, fn ($q) => $q->whereHas(
+                'stockSession',
+                fn ($q) => $q->where('branch_id', $branchId)
+            ))
+            ->orderBy('created_at', 'desc')
+            ->get();
+    }
+
+    public function getSelisihComparison(string $fromDate, string $toDate, ?int $principalId = null, ?int $branchId = null): Collection
+    {
+        $items = StockSessionItem::query()
+            ->with(['stockSession.branch', 'stockSession.principal', 'itemMaster'])
+            ->whereHas('stockSession', fn ($q) => $q->whereIn(DB::raw('DATE(session_date)'), [$fromDate, $toDate]))
+            ->when($principalId, fn ($q) => $q->whereHas(
+                'stockSession',
+                fn ($q) => $q->where('principal_id', $principalId)
+            ))
+            ->when($branchId, fn ($q) => $q->whereHas(
+                'stockSession',
+                fn ($q) => $q->where('branch_id', $branchId)
+            ))
+            ->get();
+
+        return $items
+            ->groupBy(fn (StockSessionItem $item) => implode('|', [
+                $item->stockSession?->branch_id ?? 0,
+                $item->stockSession?->principal_id ?? 0,
+                $item->kode_barang,
+            ]))
+            ->map(function (Collection $group) use ($fromDate, $toDate): array {
+                $from = $group->first(fn (StockSessionItem $item) => $item->stockSession?->session_date?->toDateString() === $fromDate);
+                $to = $group->first(fn (StockSessionItem $item) => $item->stockSession?->session_date?->toDateString() === $toDate);
+                $sample = $to ?? $from;
+                $fromSelisih = $from?->selisih ?? 0;
+                $toSelisih = $to?->selisih ?? 0;
+                $change = $toSelisih - $fromSelisih;
+
+                return [
+                    'branch' => $sample?->stockSession?->branch?->nama ?? '-',
+                    'principal' => $sample?->stockSession?->principal?->nama ?? '-',
+                    'kode_barang' => $sample?->kode_barang ?? '-',
+                    'nama_barang' => $sample?->nama_barang ?? '-',
+                    'from_item' => $from,
+                    'to_item' => $to,
+                    'from_selisih' => $fromSelisih,
+                    'to_selisih' => $toSelisih,
+                    'change' => $change,
+                    'status' => $this->comparisonStatus($fromSelisih, $toSelisih),
+                ];
+            })
+            ->filter(fn (array $row) => $row['from_selisih'] !== 0 || $row['to_selisih'] !== 0)
+            ->sortBy([
+                ['branch', 'asc'],
+                ['principal', 'asc'],
+                [fn (array $row) => -abs($row['change']), 'asc'],
+            ])
+            ->values();
+    }
+
+    public function buildSelisihComparisonCsv(string $fromDate, string $toDate, ?int $principalId = null, ?int $branchId = null): string
+    {
+        $rows = $this->getSelisihComparison($fromDate, $toDate, $principalId, $branchId);
+
+        $lines = [];
+        $lines[] = implode(',', [
+            'Tanggal Pembanding',
+            'Tanggal Target',
+            'Cabang',
+            'Principal',
+            'Kode Barang',
+            'Nama Barang',
+            'Selisih Pembanding',
+            'Selisih Target',
+            'Perubahan',
+            'Status Perubahan',
+        ]);
+
+        foreach ($rows as $row) {
+            $sample = $row['to_item'] ?? $row['from_item'];
+
+            $lines[] = implode(',', array_map(
+                fn ($value) => '"' . str_replace('"', '""', (string) $value) . '"',
+                [
+                    $fromDate,
+                    $toDate,
+                    $row['branch'],
+                    $row['principal'],
+                    $this->excelText($row['kode_barang']),
+                    $row['nama_barang'],
+                    $this->formatBaseQty($row['from_selisih'], $sample),
+                    $this->formatBaseQty($row['to_selisih'], $sample),
+                    $this->formatBaseQty($row['change'], $sample),
+                    $row['status'],
                 ]
             ));
         }
@@ -282,6 +418,27 @@ class ReportService
         }
 
         return '="' . str_replace('"', '""', (string) $value) . '"';
+    }
+
+    protected function comparisonStatus(int $fromSelisih, int $toSelisih): string
+    {
+        if ($fromSelisih === 0 && $toSelisih !== 0) {
+            return 'Baru Selisih';
+        }
+
+        if ($fromSelisih !== 0 && $toSelisih === 0) {
+            return 'Sudah Normal';
+        }
+
+        if (abs($toSelisih) > abs($fromSelisih)) {
+            return 'Selisih Memburuk';
+        }
+
+        if (abs($toSelisih) < abs($fromSelisih)) {
+            return 'Selisih Membaik';
+        }
+
+        return 'Tidak Berubah';
     }
 
     protected function labelsFromSatuan(?string $satuan): array

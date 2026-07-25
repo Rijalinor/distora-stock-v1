@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Filament\Pages\ChangePassword;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Models\User;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
@@ -14,6 +15,15 @@ use Tests\TestCase;
 class ChangePasswordTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_stock_officer_can_access_the_filament_panel(): void
+    {
+        $officer = User::factory()->create([
+            'role' => UserRole::StockOfficer,
+        ]);
+
+        $this->assertTrue($officer->canAccessPanel(Filament::getPanel('admin')));
+    }
 
     public function test_user_can_change_their_own_password(): void
     {

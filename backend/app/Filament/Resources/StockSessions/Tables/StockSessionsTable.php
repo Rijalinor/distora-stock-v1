@@ -70,8 +70,10 @@ class StockSessionsTable
                     ->numeric()
                     ->color('danger'),
 
-                TextColumn::make('assignedOfficer.name')
-                    ->label('Petugas Utama')
+                TextColumn::make('officers.name')
+                    ->label('Petugas')
+                    ->badge()
+                    ->separator(',')
                     ->placeholder('Belum ditugaskan'),
 
                 TextColumn::make('started_at')
@@ -117,10 +119,10 @@ class StockSessionsTable
             ->recordActions([
                 ViewAction::make(),
                 Action::make('assignOfficer')
-                    ->label('Tugaskan')
+                    ->label('Tambah Petugas')
                     ->icon('heroicon-o-user-plus')
                     ->color('warning')
-                    ->visible(fn ($record) => $record->assigned_to === null)
+                    ->visible(fn ($record) => $record->status !== StockSessionStatus::Completed)
                     ->form([
                         Select::make('officer_id')
                             ->label('Pilih Petugas')
@@ -134,7 +136,7 @@ class StockSessionsTable
 
                         Notification::make()
                             ->title('Petugas berhasil ditugaskan')
-                            ->body("{$officer->name} ditugaskan ke sesi {$record->principal->nama}")
+                            ->body("{$officer->name} masuk ke sesi {$record->principal->nama}")
                             ->success()
                             ->send();
                     }),

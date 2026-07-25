@@ -35,16 +35,22 @@ class ScanController extends Controller
             ], 404);
         }
 
-        if (($data['mode'] ?? 'record') === 'match') {
-            $scanningService->markAsMatched($item, $user);
-        } else {
-            $levels = $data['qty_levels'] ?? [];
+        try {
+            $item = $scanningService->acquireLock($item, $user);
 
-            if ($item->status === StockSessionItemStatus::Matched && empty($levels)) {
+            if (($data['mode'] ?? 'record') === 'match') {
                 $scanningService->markAsMatched($item, $user);
             } else {
-                $scanningService->recordStock($item, $levels, $user);
+                $levels = $data['qty_levels'] ?? [];
+
+                if ($item->status === StockSessionItemStatus::Matched && empty($levels)) {
+                    $scanningService->markAsMatched($item, $user);
+                } else {
+                    $scanningService->recordStock($item, $levels, $user);
+                }
             }
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
         }
 
         $item->refresh();

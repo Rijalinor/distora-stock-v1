@@ -43,15 +43,18 @@ class Reports extends Page implements HasTable
 
     public string $reportDate = '';
 
+    public string $comparisonDate = '';
+
     public ?int $principalId = null;
 
     public ?int $branchId = null;
 
-    protected $queryString = ['reportDate', 'principalId', 'branchId'];
+    protected $queryString = ['reportDate', 'comparisonDate', 'principalId', 'branchId'];
 
     public function mount(): void
     {
         $this->reportDate = $this->reportDate ?: today()->toDateString();
+        $this->comparisonDate = $this->comparisonDate ?: today()->subDay()->toDateString();
 
         if (Auth::user()?->isAdmin() && ! Auth::user()?->isCentralAdmin()) {
             $this->branchId = Auth::user()?->branch_id;
@@ -85,8 +88,12 @@ class Reports extends Page implements HasTable
                 ->color('gray')
                 ->form([
                     DatePicker::make('reportDate')
-                        ->label('Tanggal Laporan')
+                        ->label('Tanggal Target')
                         ->default($this->reportDate ?: today()->toDateString())
+                        ->native(false),
+                    DatePicker::make('comparisonDate')
+                        ->label('Tanggal Pembanding')
+                        ->default($this->comparisonDate ?: today()->subDay()->toDateString())
                         ->native(false),
                     Select::make('principalId')
                         ->label('Principal')
@@ -107,6 +114,7 @@ class Reports extends Page implements HasTable
                 ])
                 ->action(function (array $data): void {
                     $this->reportDate = $data['reportDate'] ?: today()->toDateString();
+                    $this->comparisonDate = $data['comparisonDate'] ?: today()->subDay()->toDateString();
                     $this->principalId = filled($data['principalId'] ?? null) ? (int) $data['principalId'] : null;
                     $this->branchId = Auth::user()?->isCentralAdmin()
                         ? (filled($data['branchId'] ?? null) ? (int) $data['branchId'] : null)
@@ -123,6 +131,11 @@ class Reports extends Page implements HasTable
                     ->label('Download Data Selisih')
                     ->icon('heroicon-m-arrow-down-tray')
                     ->action('exportSelisihCsv'),
+
+                Action::make('exportSelisihComparison')
+                    ->label('Download Perbandingan Selisih')
+                    ->icon('heroicon-m-arrow-down-tray')
+                    ->action('exportSelisihComparisonCsv'),
             ])
                 ->label('Export CSV')
                 ->icon('heroicon-m-arrow-down-tray')
@@ -152,6 +165,38 @@ class Reports extends Page implements HasTable
             $filename,
             ['Content-Type' => 'text/csv']
         );
+    }
+
+    public function exportSelisihComparisonCsv(): StreamedResponse
+    {
+        $csv = app(ReportService::class)->buildSelisihComparisonCsv(
+            $this->comparisonDate,
+            $this->reportDate,
+            $this->principalId,
+            $this->branchId
+        );
+        $filename = 'perbandingan-selisih-' . $this->comparisonDate . '-vs-' . $this->reportDate . $this->principalFilenameSuffix() . $this->branchFilenameSuffix() . '.csv';
+
+        return response()->streamDownload(
+            fn () => print($csv),
+            $filename,
+            ['Content-Type' => 'text/csv']
+        );
+    }
+
+    public function getSelisihComparisonRows()
+    {
+        return app(ReportService::class)->getSelisihComparison(
+            $this->comparisonDate,
+            $this->reportDate,
+            $this->principalId,
+            $this->branchId
+        );
+    }
+
+    public function getFoundItems()
+    {
+        return app(ReportService::class)->getFoundItems($this->reportDate, $this->principalId, $this->branchId);
     }
 
     public function table(Table $table): Table

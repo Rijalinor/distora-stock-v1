@@ -337,6 +337,61 @@
             </x-filament::section>
             @endif
 
+            @if (! $scannedItem && $notFoundBarcode)
+            <x-filament::section>
+                <x-slot name="heading">
+                    Catat Barang Temuan
+                </x-slot>
+
+                <x-slot name="description">
+                    Barcode/kode {{ $notFoundBarcode }} tidak ada di sesi ini.
+                </x-slot>
+
+                <div class="grid gap-3">
+                    <x-filament::input
+                        type="text"
+                        wire:model="foundItemName"
+                        placeholder="Nama barang"
+                    />
+
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <x-filament::input
+                            type="number"
+                            min="0"
+                            wire:model="foundQty"
+                            placeholder="Qty fisik"
+                        />
+                        <x-filament::input
+                            type="text"
+                            wire:model="foundNote"
+                            placeholder="Catatan / dugaan tertukar"
+                        />
+                    </div>
+
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        <x-filament::button
+                            type="button"
+                            color="warning"
+                            size="lg"
+                            icon="heroicon-m-plus-circle"
+                            wire:click="recordFoundItem"
+                        >
+                            Simpan Temuan
+                        </x-filament::button>
+                        <x-filament::button
+                            type="button"
+                            color="gray"
+                            size="lg"
+                            icon="heroicon-m-x-mark"
+                            wire:click="resetScanState"
+                        >
+                            Batal
+                        </x-filament::button>
+                    </div>
+                </div>
+            </x-filament::section>
+            @endif
+
             @if (! $scannedItem && $recentScans)
             <x-filament::section compact>
                 <x-slot name="heading">
@@ -532,9 +587,18 @@
 
             @if ($scannedItem)
                 <x-filament::section>
-                    <x-slot name="heading">
-                        <span class="flex flex-wrap items-center gap-2">
-                            {{ $scannedItem->nama_barang }}
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <x-filament::button
+                                type="button"
+                                wire:click="resetScanState"
+                                color="gray"
+                                size="sm"
+                                icon="heroicon-m-arrow-left"
+                            >
+                                Kembali
+                            </x-filament::button>
+
                             <x-filament::badge
                                 :color="match ($scannedItem->status) {
                                     \App\Enums\StockSessionItemStatus::Matched => 'success',
@@ -542,46 +606,26 @@
                                     \App\Enums\StockSessionItemStatus::Missing => 'warning',
                                     default => 'gray',
                                 }"
-                                size="lg"
                             >
                                 {{ $scannedItem->status === \App\Enums\StockSessionItemStatus::Missing ? 'tidak ada' : $scannedItem->status->value }}
                             </x-filament::badge>
-                        </span>
-                    </x-slot>
-
-                    <x-slot name="description">
-                        {{ $scannedItem->kode_barang }}
-                    </x-slot>
-
-                    <x-slot name="headerEnd">
-                        <x-filament::button
-                            type="button"
-                            wire:click="resetScanState"
-                            color="gray"
-                            icon="heroicon-m-arrow-left"
-                        >
-                            Scan Lagi
-                        </x-filament::button>
-                    </x-slot>
-
-                    <div class="space-y-5">
-                        <div>
-                            <x-filament::button
-                                type="button"
-                                wire:click="resetScanState"
-                                color="gray"
-                                icon="heroicon-m-arrow-left"
-                            >
-                                Kembali
-                            </x-filament::button>
                         </div>
 
-                        <x-filament::section compact>
-                            <x-slot name="heading">Qty Sistem</x-slot>
-                            <div class="text-3xl font-black text-gray-900 dark:text-white">
+                        <div class="space-y-2">
+                            <div class="break-words text-lg font-bold leading-snug text-gray-950 dark:text-white">
+                                {{ $scannedItem->nama_barang }}
+                            </div>
+                            <div class="font-mono text-sm font-semibold text-primary-600 dark:text-primary-400">
+                                {{ $scannedItem->kode_barang }}
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-white/5">
+                            <div class="text-xs font-semibold uppercase text-gray-500">Qty Sistem</div>
+                            <div class="mt-1 text-2xl font-black leading-tight text-gray-950 dark:text-white">
                                 {{ $this->formatSystemQty($scannedItem) }}
                             </div>
-                        </x-filament::section>
+                        </div>
 
                         @if ($isEditing)
                             <x-filament::callout color="info" icon="heroicon-m-pencil-square">
@@ -591,13 +635,13 @@
                         @endif
 
                         <div>
-                            <label class="mb-3 block text-base font-semibold text-gray-700 dark:text-gray-300">
+                            <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
                                 Qty Aktual
                             </label>
-                            <div class="grid gap-3 sm:gap-4" style="grid-template-columns: repeat({{ count($qtyLabels) }}, minmax(0, 1fr))">
+                            <div class="grid gap-2 sm:gap-4" style="grid-template-columns: repeat({{ count($qtyLabels) }}, minmax(0, 1fr))">
                                 @foreach ($qtyLabels as $index => $label)
-                                    <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                                        <label class="mb-2 block text-center text-sm font-medium text-gray-500">
+                                    <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                                        <label class="mb-2 block text-center text-xs font-semibold uppercase text-gray-500">
                                             {{ $label }}
                                         </label>
                                         <x-filament::input
@@ -625,46 +669,54 @@
                             </div>
                         @endif
 
-                        <div @class([
-                            'grid grid-cols-1 gap-3',
-                            'sm:grid-cols-3' => ! $isEditing,
-                            'sm:grid-cols-1' => $isEditing,
-                            'pt-2' => $isEditing,
-                        ])>
+                        <div class="space-y-3 pt-2">
                             @if (! $isEditing)
-                                <x-filament::button
-                                    wire:click="markComplete"
-                                    color="success"
-                                    size="xl"
-                                    icon="heroicon-m-check"
-                                    class="w-full"
-                                >
-                                    Lengkap
-                                </x-filament::button>
+                                <div class="grid grid-cols-2 gap-3 distora-scan-actions">
+                                    <x-filament::button
+                                        wire:click="submitActualQty"
+                                        color="warning"
+                                        size="xl"
+                                        icon="heroicon-m-exclamation-triangle"
+                                        class="w-full"
+                                    >
+                                        Selisih
+                                    </x-filament::button>
 
-                                <x-filament::button
-                                    wire:click="markMissing"
-                                    color="gray"
-                                    size="xl"
-                                    icon="heroicon-m-eye-slash"
-                                    class="w-full"
-                                >
-                                    Tidak Ada
-                                </x-filament::button>
+                                    <x-filament::button
+                                        wire:click="markComplete"
+                                        color="success"
+                                        size="xl"
+                                        icon="heroicon-m-check"
+                                        class="w-full"
+                                    >
+                                        Lengkap
+                                    </x-filament::button>
+                                </div>
+
+                                <div class="distora-scan-actions">
+                                    <x-filament::button
+                                        wire:click="markMissing"
+                                        color="gray"
+                                        size="sm"
+                                        icon="heroicon-m-eye-slash"
+                                        class="w-full"
+                                    >
+                                        Tidak Ada
+                                    </x-filament::button>
+                                </div>
+                            @else
+                                <div class="distora-scan-actions">
+                                    <x-filament::button
+                                        wire:click="submitActualQty"
+                                        color="primary"
+                                        size="xl"
+                                        icon="heroicon-m-check"
+                                        class="w-full"
+                                    >
+                                        Simpan Koreksi
+                                    </x-filament::button>
+                                </div>
                             @endif
-
-                            <x-filament::button
-                                wire:click="submitActualQty"
-                                :color="$isEditing ? 'primary' : 'warning'"
-                                size="xl"
-                                :icon="$isEditing ? 'heroicon-m-check' : 'heroicon-m-exclamation-triangle'"
-                                @class([
-                                    'w-full',
-                                    'sm:col-span-full' => $isEditing,
-                                ])
-                            >
-                                {{ $isEditing ? 'Simpan Koreksi' : 'Catat Selisih' }}
-                            </x-filament::button>
                         </div>
                     </div>
                 </x-filament::section>

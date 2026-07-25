@@ -61,8 +61,9 @@ class ViewStockSession extends ViewRecord
                             ->label('Selisih')
                             ->numeric(),
 
-                        TextEntry::make('assignedOfficer.name')
-                            ->label('Petugas Utama')
+                        TextEntry::make('officers.name')
+                            ->label('Petugas')
+                            ->listWithLineBreaks()
                             ->placeholder('Belum ditugaskan'),
 
                         TextEntry::make('started_at')
@@ -83,10 +84,10 @@ class ViewStockSession extends ViewRecord
     {
         return [
             Action::make('assignOfficer')
-                ->label('Tugaskan Petugas')
+                ->label('Tambah Petugas')
                 ->icon('heroicon-o-user-plus')
                 ->color('warning')
-                ->visible(fn () => $this->record->assigned_to === null)
+                ->visible(fn () => $this->record->status !== StockSessionStatus::Completed)
                 ->form([
                     Select::make('officer_id')
                         ->label('Pilih Petugas')
@@ -100,7 +101,7 @@ class ViewStockSession extends ViewRecord
 
                     Notification::make()
                         ->title('Petugas berhasil ditugaskan')
-                        ->body("{$officer->name} ditugaskan ke sesi ini.")
+                        ->body("{$officer->name} masuk ke sesi ini.")
                         ->success()
                         ->send();
                 }),

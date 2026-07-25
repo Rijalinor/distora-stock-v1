@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 class StockScanningService
 {
+    public const LOCK_MINUTES = 5;
+
     protected StockSessionService $sessionService;
 
     public function __construct(StockSessionService $sessionService)
@@ -69,6 +71,43 @@ class StockScanningService
             ->get();
     }
 
+    public function acquireLock(StockSessionItem $item, User $officer): StockSessionItem
+    {
+        $expiresAt = now()->subMinutes(self::LOCK_MINUTES);
+
+        $updated = StockSessionItem::query()
+            ->whereKey($item->id)
+            ->where(function ($query) use ($officer, $expiresAt): void {
+                $query->whereNull('locked_by')
+                    ->orWhere('locked_by', $officer->id)
+                    ->orWhere('locked_at', '<', $expiresAt);
+            })
+            ->update([
+                'locked_by' => $officer->id,
+                'locked_at' => now(),
+            ]);
+
+        if ($updated === 0) {
+            $item->refresh()->load('lockedBy');
+            $name = $item->lockedBy?->name ?? 'petugas lain';
+
+            throw new \RuntimeException("Barang sedang dihitung oleh {$name}. Coba lagi setelah petugas itu selesai.");
+        }
+
+        return $item->refresh();
+    }
+
+    public function releaseLock(StockSessionItem $item, User $officer): void
+    {
+        StockSessionItem::query()
+            ->whereKey($item->id)
+            ->where('locked_by', $officer->id)
+            ->update([
+                'locked_by' => null,
+                'locked_at' => null,
+            ]);
+    }
+
     /**
      * Record actual quantity for an item.
      *
@@ -95,6 +134,8 @@ class StockScanningService
                 'status' => $status,
                 'checked_by' => $officer->id,
                 'checked_at' => now(),
+                'locked_by' => null,
+                'locked_at' => null,
             ]);
 
             app(AuditLogService::class)->log('stock_recorded', $item, [], [
@@ -125,6 +166,8 @@ class StockScanningService
                 'status' => StockSessionItemStatus::Matched,
                 'checked_by' => $officer->id,
                 'checked_at' => now(),
+                'locked_by' => null,
+                'locked_at' => null,
             ]);
 
             app(AuditLogService::class)->log('stock_matched', $item, [], [
@@ -151,6 +194,8 @@ class StockScanningService
                 'status' => StockSessionItemStatus::Missing,
                 'checked_by' => $officer->id,
                 'checked_at' => now(),
+                'locked_by' => null,
+                'locked_at' => null,
             ]);
 
             app(AuditLogService::class)->log('stock_missing', $item, [], [
@@ -211,6 +256,8 @@ class StockScanningService
                 'status' => $status,
                 'checked_by' => $officer->id,
                 'checked_at' => now(),
+                'locked_by' => null,
+                'locked_at' => null,
             ]);
 
             app(AuditLogService::class)->log('stock_corrected', $item, $before, [

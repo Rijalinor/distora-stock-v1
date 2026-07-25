@@ -52,8 +52,18 @@ class StockSession extends Model
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
+    public function officers()
+    {
+        return $this->belongsToMany(User::class)->withTimestamps();
+    }
+
     public function items()
     {
         return $this->hasMany(StockSessionItem::class);
+    }
+
+    public function foundItems()
+    {
+        return $this->hasMany(StockFoundItem::class);
     }
 }

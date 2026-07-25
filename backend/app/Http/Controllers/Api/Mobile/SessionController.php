@@ -15,7 +15,7 @@ class SessionController extends Controller
         $user = $request->user();
 
         $query = StockSession::query()
-            ->with(['principal', 'branch', 'assignedOfficer'])
+            ->with(['principal', 'branch', 'assignedOfficer', 'officers'])
             ->whereDate('session_date', today())
             ->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress]);
 
@@ -40,6 +40,10 @@ class SessionController extends Controller
             'mismatched_items' => $session->mismatched_items,
             'assigned_to' => $session->assigned_to,
             'assigned_officer' => $session->assignedOfficer?->name,
+            'officers' => $session->officers->map(fn ($officer) => [
+                'id' => $officer->id,
+                'name' => $officer->name,
+            ])->values(),
         ]);
 
         return response()->json(['data' => $sessions]);
@@ -53,7 +57,7 @@ class SessionController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $session->load(['principal', 'branch', 'assignedOfficer', 'items.checkedBy']);
+        $session->load(['principal', 'branch', 'assignedOfficer', 'officers', 'items.checkedBy', 'items.lockedBy']);
 
         return response()->json([
             'id' => $session->id,
@@ -72,6 +76,10 @@ class SessionController extends Controller
             'matched_items' => $session->matched_items,
             'mismatched_items' => $session->mismatched_items,
             'assigned_officer' => $session->assignedOfficer?->name,
+            'officers' => $session->officers->map(fn ($officer) => [
+                'id' => $officer->id,
+                'name' => $officer->name,
+            ])->values(),
             'items' => $session->items->map(fn ($item) => [
                 'id' => $item->id,
                 'kode_barang' => $item->kode_barang,
@@ -82,6 +90,8 @@ class SessionController extends Controller
                 'status' => $item->status->value,
                 'checked_by' => $item->checkedBy?->name,
                 'checked_at' => $item->checked_at?->toDateTimeString(),
+                'locked_by' => $item->lockedBy?->name,
+                'locked_at' => $item->locked_at?->toDateTimeString(),
             ]),
         ]);
     }

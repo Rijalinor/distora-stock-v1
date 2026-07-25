@@ -7,6 +7,7 @@ use App\Enums\StockSessionStatus;
 use App\Enums\UserRole;
 use App\Models\StockSession;
 use App\Models\StockSessionItem;
+use App\Services\StockFoundItemService;
 use App\Services\StockScanningService;
 use App\Services\StockSessionService;
 use BackedEnum;
@@ -51,6 +52,16 @@ class StockScanning extends Page
 
     public string $pendingSearch = '';
 
+    public ?string $notFoundBarcode = null;
+
+    public string $foundItemName = '';
+
+    public int|string|null $foundQty = null;
+
+    public ?int $suspectedItemMasterId = null;
+
+    public string $foundNote = '';
+
     /** @var array<int, array{name: string, code: string, status: string, at: string}> */
     public array $recentScans = [];
 
@@ -74,7 +85,7 @@ class StockScanning extends Page
     public function getAvailableSessions()
     {
         $query = StockSession::query()
-            ->with(['principal', 'branch'])
+            ->with(['principal', 'branch', 'officers'])
             ->whereDate('session_date', today())
             ->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress]);
 
@@ -92,9 +103,7 @@ class StockScanning extends Page
         $session = StockSession::with('principal')->findOrFail($sessionId);
 
         if (Auth::user()?->isStockOfficer()) {
-            if (! $session->assigned_to) {
-                app(StockSessionService::class)->assignOfficer($session, Auth::user());
-            }
+            app(StockSessionService::class)->assignOfficer($session, Auth::user());
         }
 
         $this->selectedSessionId = $sessionId;
@@ -127,11 +136,14 @@ class StockScanning extends Page
         $items = app(StockScanningService::class)->findItemsByBarcode($session, $this->barcode);
 
         if ($items->isEmpty()) {
+            $this->notFoundBarcode = trim($this->barcode);
+            $this->foundItemName = $this->notFoundBarcode;
+            $this->foundQty = 1;
             $this->dispatch('stock-scan-failed');
 
             Notification::make()
                 ->title('Barang tidak ditemukan')
-                ->body('Barcode/kode tidak ada di sesi principal ini.')
+                ->body('Barcode/kode tidak ada di sesi principal ini. Bisa dicatat sebagai barang temuan.')
                 ->warning()
                 ->send();
 
@@ -181,8 +193,25 @@ class StockScanning extends Page
 
     protected function openScannedItem(StockSessionItem $item): void
     {
+        try {
+            $item = app(StockScanningService::class)->acquireLock($item, Auth::user());
+        } catch (\RuntimeException $e) {
+            $this->dispatch('stock-scan-failed');
+
+            Notification::make()
+                ->title('Barang sedang dikerjakan')
+                ->body($e->getMessage())
+                ->warning()
+                ->send();
+
+            $this->resetScanState(false);
+
+            return;
+        }
+
         $this->scannedItem = $item;
         $this->scanCandidates = [];
+        $this->notFoundBarcode = null;
         $this->lastScannedBarcode = '';
         $this->isEditing = $item->status !== StockSessionItemStatus::Pending;
         $this->prepareQtyLevels($item);
@@ -250,6 +279,18 @@ class StockScanning extends Page
         $session = StockSession::findOrFail($this->selectedSessionId);
         $item = $session->items()->findOrFail($itemId);
 
+        try {
+            $item = app(StockScanningService::class)->acquireLock($item, Auth::user());
+        } catch (\RuntimeException $e) {
+            Notification::make()
+                ->title('Barang sedang dikerjakan')
+                ->body($e->getMessage())
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         app(StockScanningService::class)->markAsMissing($item, Auth::user());
 
         Notification::make()
@@ -305,9 +346,7 @@ class StockScanning extends Page
         $session = StockSession::findOrFail($this->selectedSessionId);
         $item = $session->items()->findOrFail($itemId);
 
-        $this->scannedItem = $item;
-        $this->isEditing = $item->status !== StockSessionItemStatus::Pending;
-        $this->prepareQtyLevels($item);
+        $this->openScannedItem($item);
     }
 
     protected function rememberScan(StockSessionItem $item): void
@@ -353,6 +392,31 @@ class StockScanning extends Page
         }
     }
 
+    public function recordFoundItem(): void
+    {
+        if (! $this->ensureSelectedSessionAccess() || ! $this->notFoundBarcode) {
+            return;
+        }
+
+        $session = StockSession::findOrFail($this->selectedSessionId);
+
+        app(StockFoundItemService::class)->recordFoundItem($session, [
+            'kode_barang' => $this->notFoundBarcode,
+            'nama_barang' => $this->foundItemName ?: $this->notFoundBarcode,
+            'qty_aktual_base' => $this->foundQty,
+            'suspected_item_master_id' => $this->suspectedItemMasterId,
+            'note' => $this->foundNote,
+        ], Auth::user());
+
+        Notification::make()
+            ->title('Barang temuan tercatat')
+            ->body($this->foundItemName ?: $this->notFoundBarcode)
+            ->success()
+            ->send();
+
+        $this->resetScanState(false);
+    }
+
     public function getSelectedSession(): ?StockSession
     {
         if (! $this->selectedSessionId) {
@@ -361,7 +425,7 @@ class StockScanning extends Page
 
         $session = StockSession::with([
             'principal',
-            'items' => fn ($q) => $q->orderBy('status')->orderBy('nama_barang'),
+            'items' => fn ($q) => $q->with('lockedBy')->orderBy('status')->orderBy('nama_barang'),
             'items.itemMaster',
         ])
             ->find($this->selectedSessionId);
@@ -504,16 +568,25 @@ class StockScanning extends Page
         return $this->ensureSelectedSessionAccess();
     }
 
-    public function resetScanState(): void
+    public function resetScanState(bool $releaseLock = true): void
     {
+        if ($releaseLock && $this->scannedItem) {
+            app(StockScanningService::class)->releaseLock($this->scannedItem, Auth::user());
+        }
+
         $this->barcode = '';
         $this->scannedItem = null;
         $this->lastScannedBarcode = '';
         $this->scanCandidates = [];
+        $this->notFoundBarcode = null;
         $this->qtyLevels = [];
         $this->editReason = '';
         $this->isEditing = false;
         $this->pendingSearch = '';
+        $this->foundItemName = '';
+        $this->foundQty = null;
+        $this->suspectedItemMasterId = null;
+        $this->foundNote = '';
         $this->dispatch('stock-scan-ready');
     }
 }
