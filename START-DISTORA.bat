@@ -8,9 +8,10 @@ set "NGROK_EXE=C:\ngrok\ngrok.exe"
 set "APP_PORT=8010"
 set "APP_URL=http://127.0.0.1:%APP_PORT%"
 set "NGROK_URL=https://unremonstrating-inconstantly-cynthia.ngrok-free.dev"
+set "CLOUDFLARE_TUNNEL_NAME="
 set "TUNNEL=%~1"
 
-if "%TUNNEL%"=="" set "TUNNEL=ngrok"
+if "%TUNNEL%"=="" set "TUNNEL=cloudflare"
 
 echo ========================================
 echo  DISTORA STOCK - START
@@ -51,7 +52,11 @@ if /i "%TUNNEL%"=="cloudflare" (
         echo cloudflared belum ada di PATH. Tunnel Cloudflare dilewati.
     ) else (
         echo Membuka Cloudflare Tunnel...
-        start "Distora Cloudflare Tunnel" /min cmd /k "cloudflared tunnel --url %APP_URL%"
+        if "%CLOUDFLARE_TUNNEL_NAME%"=="" (
+            start "Distora Cloudflare Tunnel" /min cmd /k "cloudflared tunnel --url %APP_URL%"
+        ) else (
+            start "Distora Cloudflare Tunnel" /min cmd /k "cloudflared tunnel run %CLOUDFLARE_TUNNEL_NAME%"
+        )
     )
     goto browser
 )

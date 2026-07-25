@@ -14,8 +14,14 @@ Script ini menjalankan:
 
 - MySQL XAMPP.
 - Laravel di `http://127.0.0.1:8010/admin`.
-- ngrok jika tersedia.
+- Cloudflare Tunnel jika tersedia.
 - Browser ke URL admin.
+
+Jika shortcut khusus Cloudflare tersedia:
+
+```bat
+START-DISTORA-CLOUDFLARE.bat
+```
 
 Jika shortcut khusus ngrok tersedia:
 
@@ -43,6 +49,12 @@ Jika `cloudflared.exe` sudah terinstall:
 
 ```bat
 START-DISTORA.bat cloudflare
+```
+
+Atau double-click:
+
+```bat
+START-DISTORA-CLOUDFLARE.bat
 ```
 
 ## Stop Aplikasi
@@ -98,4 +110,3 @@ STOP-DISTORA.bat
 
 Jika masih bentrok, tutup proses lain yang memakai port 8010 atau ubah
 `APP_PORT` di `START-DISTORA.bat` dan `STOP-DISTORA.bat`.
-
