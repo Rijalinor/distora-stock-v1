@@ -98,7 +98,7 @@
 
     .distora-dashboard-hero {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(18rem, 1fr) minmax(14rem, auto);
         align-items: center;
         gap: 1.5rem;
     }
@@ -146,6 +146,7 @@
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: 0.625rem;
+        min-width: 0;
     }
 
     .distora-dashboard-pwa {
@@ -195,6 +196,17 @@
         background: rgb(180 83 9);
     }
 
+    @media (max-width: 900px) {
+        .distora-dashboard-hero {
+            align-items: stretch;
+            grid-template-columns: 1fr;
+        }
+
+        .distora-dashboard-hero__actions {
+            justify-content: flex-start;
+        }
+    }
+
     @media (max-width: 640px) {
         .fi-main {
             padding-inline: 0;
@@ -227,6 +239,13 @@
             border-radius: 0.25rem;
         }
 
+        .distora-dashboard-pwa {
+            align-items: stretch;
+            flex-direction: column;
+        }
+    }
+
+    @container (max-width: 44rem) {
         .distora-dashboard-hero {
             align-items: stretch;
             grid-template-columns: 1fr;
@@ -234,11 +253,6 @@
 
         .distora-dashboard-hero__actions {
             justify-content: flex-start;
-        }
-
-        .distora-dashboard-pwa {
-            align-items: stretch;
-            flex-direction: column;
         }
     }
 }

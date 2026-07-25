@@ -10,6 +10,8 @@ class ScanBarcodeShortcut extends Widget
 {
     protected static ?int $sort = 0;
 
+    protected int|string|array $columnSpan = 'full';
+
     protected string $view = 'filament.widgets.scan-barcode-shortcut';
 
     public static function canView(): bool
