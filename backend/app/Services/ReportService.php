@@ -6,11 +6,24 @@ use App\Enums\StockSessionItemStatus;
 use App\Models\StockSession;
 use App\Models\StockFoundItem;
 use App\Models\StockSessionItem;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ReportService
 {
+    public function findPreviousStockDate(string $targetDate, ?int $principalId = null, ?int $branchId = null): ?string
+    {
+        $date = StockSession::query()
+            ->whereDate('session_date', '<', $targetDate)
+            ->when($principalId, fn ($q) => $q->where('principal_id', $principalId))
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->orderByDesc('session_date')
+            ->value('session_date');
+
+        return $date ? Carbon::parse($date)->toDateString() : null;
+    }
+
     public function formatBaseQty(?int $baseQty, StockSessionItem $item): string
     {
         if ($baseQty === null) {
@@ -265,7 +278,7 @@ class ReportService
             ->get();
     }
 
-    public function getSelisihComparison(string $fromDate, string $toDate, ?int $principalId = null, ?int $branchId = null): Collection
+    public function getSelisihComparison(string $fromDate, string $toDate, ?int $principalId = null, ?int $branchId = null, bool $includeUnchanged = false): Collection
     {
         $items = StockSessionItem::query()
             ->with(['stockSession.branch', 'stockSession.principal', 'itemMaster'])
@@ -307,7 +320,7 @@ class ReportService
                     'status' => $this->comparisonStatus($fromSelisih, $toSelisih),
                 ];
             })
-            ->filter(fn (array $row) => $row['from_selisih'] !== 0 || $row['to_selisih'] !== 0)
+            ->when(! $includeUnchanged, fn (Collection $rows) => $rows->filter(fn (array $row) => $row['from_selisih'] !== 0 || $row['to_selisih'] !== 0))
             ->sortBy([
                 ['branch', 'asc'],
                 ['principal', 'asc'],

@@ -7,6 +7,7 @@ use App\Enums\StockSessionStatus;
 use App\Enums\UserRole;
 use App\Models\StockSession;
 use App\Models\StockSessionItem;
+use App\Services\ReportService;
 use App\Services\StockFoundItemService;
 use App\Services\StockScanningService;
 use App\Services\StockSessionService;
@@ -52,11 +53,17 @@ class StockScanning extends Page
 
     public string $pendingSearch = '';
 
+    public string $checkedSearch = '';
+
+    public string $comparisonSearch = '';
+
+    public string $comparisonFilter = 'all';
+
     public ?string $notFoundBarcode = null;
 
     public string $foundItemName = '';
 
-    public int|string|null $foundQty = null;
+    public string $foundQty = '';
 
     public ?int $suspectedItemMasterId = null;
 
@@ -136,14 +143,29 @@ class StockScanning extends Page
         $items = app(StockScanningService::class)->findItemsByBarcode($session, $this->barcode);
 
         if ($items->isEmpty()) {
+            $existingFoundItem = app(StockFoundItemService::class)->findExisting($session, $this->barcode);
+
+            if ($existingFoundItem) {
+                Notification::make()
+                    ->title('Barang temuan sudah tercatat')
+                    ->body("Barcode/kode {$this->barcode} sebelumnya sudah dicatat dengan qty {$existingFoundItem->qty_aktual_display}.")
+                    ->warning()
+                    ->send();
+
+                $this->barcode = '';
+                $this->dispatch('stock-scan-ready');
+
+                return;
+            }
+
             $this->notFoundBarcode = trim($this->barcode);
             $this->foundItemName = $this->notFoundBarcode;
-            $this->foundQty = 1;
-            $this->dispatch('stock-scan-failed');
+            $this->foundQty = '1 PCS';
+            $this->dispatch('stock-found-item-ready');
 
             Notification::make()
                 ->title('Barang tidak ditemukan')
-                ->body('Barcode/kode tidak ada di sesi principal ini. Bisa dicatat sebagai barang temuan.')
+                ->body('Barcode, kode, atau nama barang tidak ada di sesi principal ini. Bisa dicatat sebagai barang temuan.')
                 ->warning()
                 ->send();
 
@@ -165,11 +187,11 @@ class StockScanning extends Page
                 ->values()
                 ->all();
             $this->barcode = '';
-            $this->dispatch('stock-item-scanned');
+            $this->dispatch('stock-scan-candidates');
 
             Notification::make()
-                ->title('Barcode dipakai beberapa item')
-                ->body('Pilih kode barang yang sedang dihitung.')
+                ->title('Ditemukan beberapa item')
+                ->body('Pilih barang yang sedang dihitung.')
                 ->warning()
                 ->send();
 
@@ -400,13 +422,25 @@ class StockScanning extends Page
 
         $session = StockSession::findOrFail($this->selectedSessionId);
 
-        app(StockFoundItemService::class)->recordFoundItem($session, [
-            'kode_barang' => $this->notFoundBarcode,
-            'nama_barang' => $this->foundItemName ?: $this->notFoundBarcode,
-            'qty_aktual_base' => $this->foundQty,
-            'suspected_item_master_id' => $this->suspectedItemMasterId,
-            'note' => $this->foundNote,
-        ], Auth::user());
+        try {
+            app(StockFoundItemService::class)->recordFoundItem($session, [
+                'kode_barang' => $this->notFoundBarcode,
+                'nama_barang' => $this->foundItemName ?: $this->notFoundBarcode,
+                'qty_aktual_display' => $this->foundQty,
+                'suspected_item_master_id' => $this->suspectedItemMasterId,
+                'note' => $this->foundNote,
+            ], Auth::user());
+        } catch (\RuntimeException $e) {
+            Notification::make()
+                ->title('Barang temuan sudah tercatat')
+                ->body($e->getMessage())
+                ->warning()
+                ->send();
+
+            $this->resetScanState(false);
+
+            return;
+        }
 
         Notification::make()
             ->title('Barang temuan tercatat')
@@ -425,8 +459,9 @@ class StockScanning extends Page
 
         $session = StockSession::with([
             'principal',
-            'items' => fn ($q) => $q->with('lockedBy')->orderBy('status')->orderBy('nama_barang'),
+            'items' => fn ($q) => $q->with(['checkedBy', 'lockedBy'])->orderBy('status')->orderBy('nama_barang'),
             'items.itemMaster',
+            'foundItems.foundBy',
         ])
             ->find($this->selectedSessionId);
 
@@ -449,7 +484,32 @@ class StockScanning extends Page
 
     public function formatSystemQty(StockSessionItem $item): string
     {
-        return app(\App\Services\ReportService::class)->formatBaseQty($item->qty_sistem_base, $item);
+        return app(ReportService::class)->formatBaseQty($item->qty_sistem_base, $item);
+    }
+
+    public function getComparisonDateForSession(StockSession $session): ?string
+    {
+        return app(ReportService::class)->findPreviousStockDate(
+            $session->session_date->toDateString(),
+            $session->principal_id,
+            $session->branch_id
+        );
+    }
+
+    public function getComparisonRowsForSession(StockSession $session)
+    {
+        $comparisonDate = $this->getComparisonDateForSession($session);
+
+        if (! $comparisonDate) {
+            return collect();
+        }
+
+        return app(ReportService::class)->getSelisihComparison(
+            $comparisonDate,
+            $session->session_date->toDateString(),
+            $session->principal_id,
+            $session->branch_id
+        );
     }
 
     protected function prepareQtyLevels(StockSessionItem $item): void
@@ -583,8 +643,11 @@ class StockScanning extends Page
         $this->editReason = '';
         $this->isEditing = false;
         $this->pendingSearch = '';
+        $this->checkedSearch = '';
+        $this->comparisonSearch = '';
+        $this->comparisonFilter = 'all';
         $this->foundItemName = '';
-        $this->foundQty = null;
+        $this->foundQty = '';
         $this->suspectedItemMasterId = null;
         $this->foundNote = '';
         $this->dispatch('stock-scan-ready');

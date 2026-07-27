@@ -49,25 +49,34 @@ class Reports extends Page implements HasTable
 
     public ?int $branchId = null;
 
-    protected $queryString = ['reportDate', 'comparisonDate', 'principalId', 'branchId'];
+    public string $reportSearch = '';
+
+    protected $queryString = ['reportDate', 'principalId', 'branchId'];
 
     public function mount(): void
     {
         $this->reportDate = $this->reportDate ?: today()->toDateString();
-        $this->comparisonDate = $this->comparisonDate ?: today()->subDay()->toDateString();
 
-        if (Auth::user()?->isAdmin() && ! Auth::user()?->isCentralAdmin()) {
+        if (Auth::user() && ! Auth::user()?->isCentralAdmin()) {
             $this->branchId = Auth::user()?->branch_id;
         }
+
+        $this->syncComparisonDate();
     }
 
     public static function canAccess(): bool
     {
-        return Auth::user()?->isAdmin() ?? false;
+        $user = Auth::user();
+
+        return $user && ($user->isAdmin() || $user->isStockOfficer());
     }
 
     protected function getHeaderWidgets(): array
     {
+        if (Auth::user()?->isStockOfficer()) {
+            return [];
+        }
+
         return [
             ReportStatsOverview::make([
                 'date' => $this->reportDate ?: null,
@@ -81,46 +90,48 @@ class Reports extends Page implements HasTable
     {
         $dateLabel = Carbon::parse($this->reportDate ?: today()->toDateString())->format('d M Y');
 
-        return [
-            Action::make('filterReport')
-                ->label(($this->principalId || $this->branchId) ? "Filter: {$dateLabel}" : "Tanggal: {$dateLabel}")
-                ->icon('heroicon-m-funnel')
-                ->color('gray')
-                ->form([
-                    DatePicker::make('reportDate')
-                        ->label('Tanggal Target')
-                        ->default($this->reportDate ?: today()->toDateString())
-                        ->native(false),
-                    DatePicker::make('comparisonDate')
-                        ->label('Tanggal Pembanding')
-                        ->default($this->comparisonDate ?: today()->subDay()->toDateString())
-                        ->native(false),
-                    Select::make('principalId')
-                        ->label('Principal')
-                        ->options(fn () => Principal::query()->orderBy('nama')->pluck('nama', 'id'))
-                        ->default($this->principalId)
-                        ->searchable()
-                        ->preload()
-                        ->placeholder('Semua principal'),
-                    Select::make('branchId')
-                        ->label('Cabang')
-                        ->options(fn () => Branch::query()->orderBy('nama')->pluck('nama', 'id'))
-                        ->default($this->branchId)
-                        ->disabled(fn () => Auth::user()?->isAdmin() && ! Auth::user()?->isCentralAdmin())
-                        ->dehydrated()
-                        ->searchable()
-                        ->preload()
-                        ->placeholder('Semua cabang'),
-                ])
-                ->action(function (array $data): void {
-                    $this->reportDate = $data['reportDate'] ?: today()->toDateString();
-                    $this->comparisonDate = $data['comparisonDate'] ?: today()->subDay()->toDateString();
-                    $this->principalId = filled($data['principalId'] ?? null) ? (int) $data['principalId'] : null;
-                    $this->branchId = Auth::user()?->isCentralAdmin()
-                        ? (filled($data['branchId'] ?? null) ? (int) $data['branchId'] : null)
-                        : Auth::user()?->branch_id;
-                }),
+        $filterAction = Action::make('filterReport')
+            ->label(Auth::user()?->isStockOfficer() ? $dateLabel : (($this->principalId || $this->branchId) ? "Filter: {$dateLabel}" : "Tanggal: {$dateLabel}"))
+            ->icon('heroicon-m-calendar-days')
+            ->color(Auth::user()?->isStockOfficer() ? 'primary' : 'gray')
+            ->form([
+                DatePicker::make('reportDate')
+                    ->label('Tanggal Stock Opname')
+                    ->default($this->reportDate ?: today()->toDateString())
+                    ->native(false),
+                Select::make('principalId')
+                    ->label('Principal')
+                    ->options(fn () => Principal::query()->orderBy('nama')->pluck('nama', 'id'))
+                    ->default($this->principalId)
+                    ->searchable()
+                    ->preload()
+                    ->placeholder('Semua principal'),
+                Select::make('branchId')
+                    ->label('Cabang')
+                    ->options(fn () => Branch::query()->orderBy('nama')->pluck('nama', 'id'))
+                    ->default($this->branchId)
+                    ->disabled(fn () => Auth::user() && ! Auth::user()?->isCentralAdmin())
+                    ->dehydrated()
+                    ->searchable()
+                    ->preload()
+                    ->placeholder('Semua cabang'),
+            ])
+            ->action(function (array $data): void {
+                $this->reportDate = $data['reportDate'] ?: today()->toDateString();
+                $this->principalId = filled($data['principalId'] ?? null) ? (int) $data['principalId'] : null;
+                $this->branchId = Auth::user()?->isCentralAdmin()
+                    ? (filled($data['branchId'] ?? null) ? (int) $data['branchId'] : null)
+                    : Auth::user()?->branch_id;
+                $this->reportSearch = '';
+                $this->syncComparisonDate();
+            });
 
+        if (Auth::user()?->isStockOfficer()) {
+            return [$filterAction];
+        }
+
+        return [
+            $filterAction,
             ActionGroup::make([
                 Action::make('exportDaily')
                     ->label('Download Laporan Harian')
@@ -169,6 +180,8 @@ class Reports extends Page implements HasTable
 
     public function exportSelisihComparisonCsv(): StreamedResponse
     {
+        $this->syncComparisonDate();
+
         $csv = app(ReportService::class)->buildSelisihComparisonCsv(
             $this->comparisonDate,
             $this->reportDate,
@@ -186,6 +199,12 @@ class Reports extends Page implements HasTable
 
     public function getSelisihComparisonRows()
     {
+        $this->syncComparisonDate();
+
+        if (! $this->comparisonDate) {
+            return collect();
+        }
+
         return app(ReportService::class)->getSelisihComparison(
             $this->comparisonDate,
             $this->reportDate,
@@ -296,5 +315,14 @@ class Reports extends Page implements HasTable
         $branch = Branch::find($this->branchId);
 
         return $branch ? '-' . str($branch->kode ?: $branch->nama)->slug() : '';
+    }
+
+    protected function syncComparisonDate(): void
+    {
+        $this->comparisonDate = app(ReportService::class)->findPreviousStockDate(
+            $this->reportDate ?: today()->toDateString(),
+            $this->principalId,
+            $this->branchId
+        ) ?? '';
     }
 }

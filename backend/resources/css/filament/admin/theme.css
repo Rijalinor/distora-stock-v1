@@ -213,6 +213,14 @@
             padding-top: 0.5rem;
         }
 
+        .fi-main:has(.distora-scan-page) {
+            padding-top: 0;
+        }
+
+        .fi-page:has(.distora-scan-page) {
+            gap: 0;
+        }
+
         .fi-header:has(.fi-header-heading:empty) {
             display: none;
         }

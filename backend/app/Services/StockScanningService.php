@@ -23,7 +23,7 @@ class StockScanningService
     }
 
     /**
-     * Find a stock session item by barcode or product code.
+     * Find a stock session item by barcode, product code, or item text.
      *
      * @param StockSession $session
      * @param string $barcode
@@ -44,6 +44,20 @@ class StockScanningService
             return collect();
         }
 
+        $exactItems = $this->findItemsByExactCode($session, $barcode);
+
+        if ($exactItems->isNotEmpty()) {
+            return $exactItems;
+        }
+
+        return $this->searchSessionItems($session, $barcode);
+    }
+
+    /**
+     * @return Collection<int, StockSessionItem>
+     */
+    protected function findItemsByExactCode(StockSession $session, string $barcode): Collection
+    {
         $itemMasterIds = ItemMaster::query()
             ->where('branch_id', $session->branch_id)
             ->where(fn ($query) => $query
@@ -51,23 +65,39 @@ class StockScanningService
                 ->orWhere('kode_barang', $barcode))
             ->pluck('id');
 
-        if ($itemMasterIds->isNotEmpty()) {
-            $items = StockSessionItem::query()
-                ->where('stock_session_id', $session->id)
-                ->whereIn('item_master_id', $itemMasterIds)
-                ->with('itemMaster')
-                ->orderBy('kode_barang')
-                ->get();
+        return StockSessionItem::query()
+            ->where('stock_session_id', $session->id)
+            ->where(fn ($query) => $query
+                ->where('kode_barang', $barcode)
+                ->when($itemMasterIds->isNotEmpty(), fn ($query) => $query->orWhereIn('item_master_id', $itemMasterIds)))
+            ->with('itemMaster')
+            ->orderBy('kode_barang')
+            ->get();
+    }
 
-            if ($items->isNotEmpty()) {
-                return $items;
-            }
-        }
+    /**
+     * @return Collection<int, StockSessionItem>
+     */
+    protected function searchSessionItems(StockSession $session, string $search): Collection
+    {
+        $like = '%' . addcslashes($search, '%_\\') . '%';
 
         return StockSessionItem::query()
             ->where('stock_session_id', $session->id)
-            ->where('kode_barang', $barcode)
+            ->where(fn ($query) => $query
+                ->where('kode_barang', 'like', $like)
+                ->orWhere('nama_barang', 'like', $like)
+                ->orWhere('satuan', 'like', $like)
+                ->orWhereHas('itemMaster', fn ($query) => $query
+                    ->where('branch_id', $session->branch_id)
+                    ->where(fn ($query) => $query
+                        ->where('kode_barang', 'like', $like)
+                        ->orWhere('barcode', 'like', $like)
+                        ->orWhere('nama_barang', 'like', $like)
+                        ->orWhere('satuan', 'like', $like))))
             ->with('itemMaster')
+            ->orderBy('kode_barang')
+            ->limit(25)
             ->get();
     }
 

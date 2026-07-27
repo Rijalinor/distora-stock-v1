@@ -2,6 +2,33 @@
 
 Semua perubahan signifikan pada proyek ini dicatat di sini.
 
+## [0.5.0] - 2026-07-27
+
+### Added
+
+- Pencarian item berdasarkan barcode, kode barang, atau nama barang.
+- Alur Barang Temuan dengan nama, qty teks, catatan, petugas, dan waktu.
+- Pencegahan barcode/kode Barang Temuan duplikat dalam satu sesi.
+- Panel Perbandingan terhadap stock opname terakhir.
+- Filter status Perbandingan termasuk gabungan Baru/Memburuk.
+- Laporan mobile sederhana khusus petugas stok.
+- Dokumentasi alur stock opname dan flowchart Mermaid.
+
+### Changed
+
+- Daftar Perbandingan, Barang Temuan, Sudah Dicek, Item Selisih, dan Belum Dicek diurutkan berdasarkan kode A-Z.
+- Panel halaman scan dapat dibuka dan ditutup untuk mengurangi scroll.
+- Qty Barang Temuan menerima teks bebas seperti `1 CTN 1 PCK 1 PCS`.
+- Laporan petugas hanya menampilkan informasi yang diperlukan; laporan admin tetap lengkap.
+- Tanggal pembanding memakai stock opname terakhir untuk principal dan cabang yang sama.
+
+### Fixed
+
+- Fokus pemilihan item ketika satu barcode cocok dengan beberapa kode.
+- Fokus form Barang Temuan ketika hasil scan tidak ditemukan.
+- Kalkulator dapat ditutup dengan klik di luar atau tombol Escape.
+- Jarak kosong antara navbar dan kartu Scan Barcode pada tampilan mobile.
+
 ## [0.4.0] - 2026-07-22
 
 ### Added
@@ -97,4 +124,3 @@ Semua perubahan signifikan pada proyek ini dicatat di sini.
 - SQLite sebagai database default development.
 - MySQL dikonfigurasi untuk production.
 - Composer setup/dev scripts.
-

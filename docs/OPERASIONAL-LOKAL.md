@@ -14,7 +14,6 @@ Script ini menjalankan:
 
 - MySQL XAMPP.
 - Laravel di `http://127.0.0.1:8010/admin`.
-- Cloudflare Tunnel jika tersedia.
 - Browser ke URL admin.
 
 Jika shortcut khusus Cloudflare tersedia:
@@ -34,7 +33,7 @@ START-DISTORA-NGROK.bat
 Untuk pemakaian lokal di PC yang sama:
 
 ```bat
-START-DISTORA.bat none
+START-DISTORA.bat
 ```
 
 Buka:
@@ -68,7 +67,7 @@ STOP-DISTORA.bat
 Script stop akan:
 
 - Menutup proses Laravel.
-- Menutup proses ngrok/cloudflared.
+- Menutup window ngrok/cloudflared yang dibuka script.
 - Menghentikan MySQL XAMPP.
 - Menutup window CMD Distora yang masih terbuka.
 - Menutup window stop otomatis setelah selesai.
@@ -79,6 +78,7 @@ Script stop akan:
 - Untuk kamera HP, akses harus melalui HTTPS seperti ngrok atau Cloudflare Tunnel.
 - Jika tunnel mati, aplikasi lokal tetap bisa dibuka dari PC di `http://127.0.0.1:8010/admin`.
 - Jika scan kamera tidak aktif, coba refresh halaman atau pakai input barcode manual.
+- Panduan proses opname dan flowchart tersedia di [ALUR-STOCK-OPNAME.md](ALUR-STOCK-OPNAME.md).
 
 ## Troubleshooting
 

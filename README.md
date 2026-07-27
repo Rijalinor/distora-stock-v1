@@ -37,12 +37,16 @@ laporan.
 ### Scan Barcode
 
 - Petugas memilih sesi principal hari ini.
-- Scan dari kamera atau input manual barcode/kode barang.
+- Scan dari kamera atau cari barcode, kode barang, atau nama barang.
 - Barcode dicari hanya pada item yang ada di sesi aktif.
 - Jika barcode dipakai beberapa item dalam sesi yang sama, petugas memilih kode barang yang benar.
+- Barang yang tidak ada di sesi dapat dicatat sebagai Barang Temuan.
+- Barcode/kode Barang Temuan tidak dapat disimpan dua kali dalam sesi yang sama.
+- Qty Barang Temuan diisi sebagai teks agar mudah dibaca, misalnya `1 CTN 1 PCK 1 PCS`.
 - Daftar item belum dicek bisa dicari berdasarkan kode atau nama barang.
 - Item belum dicek bisa langsung diedit atau ditandai "Tidak Ada".
 - Item selisih bisa dikoreksi cepat.
+- Panel Perbandingan memakai stock opname terakhir untuk principal dan cabang yang sama.
 - Qty aktual mendukung multi-level seperti `CTN-PCK-PCS`.
 - Progress sesi dihitung otomatis.
 
@@ -56,6 +60,8 @@ laporan.
 - Export detail Sesi Stock.
 - Selisih ditampilkan dalam satuan manusia, bukan base mentah, misalnya `-5 PCS` atau `1 CTN 2 PCK 15 PCS`.
 - CSV export dibuat Excel-safe untuk kode dan barcode panjang.
+- Petugas mendapat laporan mobile sederhana tanpa tabel lebar dan menu export.
+- Admin tetap mendapat laporan lengkap dan export CSV.
 
 ## Alur Operasional
 
@@ -64,10 +70,14 @@ laporan.
 3. Sistem membuat sesi stock opname per principal.
 4. Petugas membuka menu **Scan Barcode**.
 5. Petugas memilih principal/sesi.
-6. Petugas scan barcode atau pilih item dari daftar belum dicek.
-7. Petugas mencatat qty aktual, menandai lengkap, atau menandai tidak ada.
-8. Admin review item selisih dan laporan.
-9. Admin download laporan harian atau data selisih.
+6. Petugas scan barcode, mencari kode/nama, atau memilih item dari daftar belum dicek.
+7. Petugas mencatat qty aktual atau mencatat Barang Temuan jika item tidak ada.
+8. Petugas review selisih, item belum dicek, dan perbandingan opname terakhir.
+9. Petugas menyelesaikan sesi.
+10. Admin review dan download laporan.
+
+Flowchart lengkap tersedia di
+[docs/ALUR-STOCK-OPNAME.md](docs/ALUR-STOCK-OPNAME.md).
 
 ## Struktur Qty
 
@@ -88,7 +98,7 @@ Contoh struktur `CTN-PCK-PCS`:
 |---|---|
 | Admin Pusat | Semua cabang, semua master data, semua sesi, semua laporan, user management |
 | Admin Cabang | Item master cabang sendiri, upload stok cabang, sesi cabang, laporan cabang |
-| Stock Officer | Scan barcode dan update item pada sesi cabangnya |
+| Stock Officer | Scan/cari barang, update sesi cabang, dan melihat laporan sederhana |
 
 ## Password User
 
@@ -180,7 +190,7 @@ cd backend
 php artisan test
 ```
 
-Status terakhir: 15 test pass.
+Status terakhir: 23 test pass.
 
 ## Struktur Folder
 
@@ -213,6 +223,7 @@ distora-stock/
 - [PROJECT_STATUS.md](PROJECT_STATUS.md): status fitur dan backlog.
 - [SESSION_HANDOVER.md](SESSION_HANDOVER.md): konteks teknis untuk lanjut kerja.
 - [docs/OPERASIONAL-LOKAL.md](docs/OPERASIONAL-LOKAL.md): SOP start/stop lokal.
+- [docs/ALUR-STOCK-OPNAME.md](docs/ALUR-STOCK-OPNAME.md): alur admin dan petugas beserta flowchart.
 - [docs/STRUKTUR-3-CABANG.md](docs/STRUKTUR-3-CABANG.md): struktur operasional 3 cabang.
 - [backend/README.md](backend/README.md): catatan teknis backend.
 

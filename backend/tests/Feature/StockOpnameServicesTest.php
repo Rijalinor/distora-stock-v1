@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\CsvImportService;
 use App\Services\ItemMasterBackupService;
 use App\Services\ReportService;
+use App\Services\StockFoundItemService;
 use App\Services\StockScanningService;
 use App\Services\StockSessionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -408,6 +409,51 @@ class StockOpnameServicesTest extends TestCase
     }
 
     /** @test */
+    public function it_can_search_session_items_by_name_when_barcode_is_missing()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'PSEARCH',
+            'nama' => 'Principal Search',
+            'status' => true,
+        ]);
+
+        $itemMaster = ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'MILK-001',
+            'barcode' => null,
+            'nama_barang' => 'Susu Coklat Botol 250ML',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::Open,
+            'total_items' => 1,
+        ]);
+
+        StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'item_master_id' => $itemMaster->id,
+            'kode_barang' => 'MILK-001',
+            'nama_barang' => 'Susu Coklat Botol 250ML',
+            'satuan' => 'PCS',
+            'qty_sistem_display' => '5 PCS',
+            'qty_sistem_base' => 5,
+            'status' => StockSessionItemStatus::Pending,
+        ]);
+
+        $items = app(StockScanningService::class)->findItemsByBarcode($session, 'coklat botol');
+
+        $this->assertCount(1, $items);
+        $this->assertEquals('MILK-001', $items->first()->kode_barang);
+    }
+
+    /** @test */
     public function it_keeps_item_master_codes_and_scans_separate_per_branch()
     {
         $pusat = Branch::where('kode', 'PUSAT')->firstOrFail();
@@ -692,6 +738,85 @@ class StockOpnameServicesTest extends TestCase
     }
 
     /** @test */
+    public function it_uses_the_latest_previous_stock_session_date_as_comparison_date()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $otherBranch = Branch::create([
+            'kode' => 'CBG05',
+            'nama' => 'Cabang 05',
+            'status' => true,
+        ]);
+        $principal = Principal::create([
+            'kode' => 'PLAST',
+            'nama' => 'Principal Last Count',
+            'status' => true,
+        ]);
+
+        foreach (['2026-07-01', '2026-07-18', '2026-07-25'] as $date) {
+            StockSession::create([
+                'principal_id' => $principal->id,
+                'branch_id' => $branch->id,
+                'session_date' => $date,
+                'status' => StockSessionStatus::Completed,
+                'total_items' => 1,
+            ]);
+        }
+
+        StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $otherBranch->id,
+            'session_date' => '2026-07-24',
+            'status' => StockSessionStatus::Completed,
+            'total_items' => 1,
+        ]);
+
+        $date = app(ReportService::class)->findPreviousStockDate('2026-07-25', $principal->id, $branch->id);
+
+        $this->assertEquals('2026-07-18', $date);
+    }
+
+    /** @test */
+    public function it_can_include_unchanged_items_in_stock_comparison()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'PALL',
+            'nama' => 'Principal All Comparison',
+            'status' => true,
+        ]);
+
+        foreach (['2026-07-20', '2026-07-25'] as $date) {
+            $session = StockSession::create([
+                'principal_id' => $principal->id,
+                'branch_id' => $branch->id,
+                'session_date' => $date,
+                'status' => StockSessionStatus::Completed,
+                'total_items' => 1,
+            ]);
+
+            StockSessionItem::create([
+                'stock_session_id' => $session->id,
+                'kode_barang' => 'ITEM-SAME',
+                'nama_barang' => 'Barang Sama',
+                'satuan' => 'PCS',
+                'qty_sistem_display' => '10 PCS',
+                'qty_sistem_base' => 10,
+                'qty_aktual_display' => '10 PCS',
+                'qty_aktual_base' => 10,
+                'selisih' => 0,
+                'status' => StockSessionItemStatus::Matched,
+            ]);
+        }
+
+        $defaultRows = app(ReportService::class)->getSelisihComparison('2026-07-20', '2026-07-25', $principal->id, $branch->id);
+        $allRows = app(ReportService::class)->getSelisihComparison('2026-07-20', '2026-07-25', $principal->id, $branch->id, true);
+
+        $this->assertCount(0, $defaultRows);
+        $this->assertCount(1, $allRows);
+        $this->assertEquals('Tidak Berubah', $allRows->first()['status']);
+    }
+
+    /** @test */
     public function it_includes_found_items_in_selisih_csv()
     {
         $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
@@ -728,6 +853,71 @@ class StockOpnameServicesTest extends TestCase
         $this->assertStringContainsString('Barang Temuan', $csv);
         $this->assertStringContainsString('"=""FOUND-001"""', $csv);
         $this->assertStringContainsString('3 PCS', $csv);
+    }
+
+    /** @test */
+    public function it_stores_found_item_physical_quantity_as_free_text_display()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'FOUND-TEXT',
+            'nama' => 'Principal Found Text',
+            'status' => true,
+        ]);
+        $officer = User::factory()->create(['role' => UserRole::StockOfficer]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::InProgress,
+            'total_items' => 1,
+        ]);
+
+        $foundItem = app(StockFoundItemService::class)->recordFoundItem($session, [
+            'kode_barang' => 'FOUND-TEXT-001',
+            'nama_barang' => 'Barang Temuan Teks',
+            'qty_aktual_display' => '1 CTN 1 PCK 1 PCS',
+            'note' => 'Ditemukan di rak campur',
+        ], $officer);
+
+        $this->assertEquals('1 CTN 1 PCK 1 PCS', $foundItem->qty_aktual_display);
+        $this->assertDatabaseHas('stock_found_items', [
+            'kode_barang' => 'FOUND-TEXT-001',
+            'qty_aktual_display' => '1 CTN 1 PCK 1 PCS',
+            'qty_aktual_base' => 1,
+        ]);
+    }
+
+    /** @test */
+    public function it_rejects_duplicate_found_item_codes_in_the_same_session()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'FOUND-DUP',
+            'nama' => 'Principal Found Duplicate',
+            'status' => true,
+        ]);
+        $officer = User::factory()->create(['role' => UserRole::StockOfficer]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::InProgress,
+            'total_items' => 1,
+        ]);
+        $service = app(StockFoundItemService::class);
+        $data = [
+            'kode_barang' => 'FOUND-DUP-001',
+            'nama_barang' => 'Barang Temuan Duplikat',
+            'qty_aktual_display' => '1 PCS',
+        ];
+
+        $service->recordFoundItem($session, $data, $officer);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('sudah tercatat sebagai barang temuan');
+
+        $service->recordFoundItem($session, $data, $officer);
     }
 
     /** @test */

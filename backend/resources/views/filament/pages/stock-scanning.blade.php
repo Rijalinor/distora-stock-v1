@@ -43,6 +43,22 @@
                 this.beep(900, 110);
                 this.$nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
             },
+            candidatesFlash: false,
+            foundItemFlash: false,
+            focusCandidates() {
+                navigator.vibrate?.(80);
+                this.beep(700, 110);
+                this.candidatesFlash = true;
+                this.$nextTick(() => this.$refs.scanCandidates?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                setTimeout(() => this.candidatesFlash = false, 900);
+            },
+            focusFoundItem() {
+                navigator.vibrate?.([80, 60, 80]);
+                this.beep(520, 130);
+                this.foundItemFlash = true;
+                this.$nextTick(() => this.$refs.foundItemPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                setTimeout(() => this.foundItemFlash = false, 900);
+            },
             feedbackError() {
                 navigator.vibrate?.([80, 60, 80]);
                 this.beep(220, 180);
@@ -53,9 +69,11 @@
             },
         }"
         x-on:stock-item-scanned.window="feedbackSuccess()"
+        x-on:stock-scan-candidates.window="focusCandidates()"
+        x-on:stock-found-item-ready.window="focusFoundItem()"
         x-on:stock-scan-failed.window="feedbackError()"
         x-on:stock-scan-ready.window="focusBarcode()"
-        class="distora-scan-page mx-auto w-full max-w-5xl space-y-4 px-0 sm:space-y-6 sm:px-0"
+        class="distora-scan-page mx-auto w-full max-w-5xl space-y-3 px-0 pb-16 sm:space-y-5 sm:px-0 sm:pb-20"
     >
         @if (! $session)
             <x-filament::section>
@@ -122,7 +140,7 @@
                     <span class="text-2xl sm:text-3xl">Scan Barcode</span>
                 </x-slot>
                 <x-slot name="description">
-                    <span class="text-base sm:text-lg">Arahkan scanner atau ketik kode barang manual.</span>
+                    <span class="text-base sm:text-lg">Arahkan scanner atau cari kode/nama barang manual.</span>
                 </x-slot>
 
                 <div
@@ -282,7 +300,7 @@
                             type="text"
                             wire:model="barcode"
                             x-ref="barcodeInput"
-                            placeholder="Ketik atau scan barcode..."
+                            placeholder="Ketik barcode, kode, atau nama barang..."
                             class="text-xl"
                         />
                         <x-filament::button type="submit" size="xl" class="w-full sm:w-auto" wire:loading.attr="disabled" wire:target="scanBarcode">
@@ -295,13 +313,18 @@
             @endif
 
             @if (! $scannedItem && $scanCandidates)
+            <div
+                x-ref="scanCandidates"
+                x-bind:class="{ 'distora-candidate-flash': candidatesFlash }"
+                class="rounded-xl"
+            >
             <x-filament::section>
                 <x-slot name="heading">
-                    Pilih Kode Barang
+                    Pilih Barang
                 </x-slot>
 
                 <x-slot name="description">
-                    Barcode {{ $lastScannedBarcode }} valid untuk beberapa kode barang. Pilih kode yang sedang dihitung.
+                    Pencarian {{ $lastScannedBarcode }} cocok dengan beberapa item. Pilih barang yang sedang dihitung.
                 </x-slot>
 
                 <div class="grid gap-3 sm:grid-cols-2">
@@ -335,9 +358,15 @@
                     @endforeach
                 </div>
             </x-filament::section>
+            </div>
             @endif
 
             @if (! $scannedItem && $notFoundBarcode)
+            <div
+                x-ref="foundItemPanel"
+                x-bind:class="{ 'distora-candidate-flash': foundItemFlash }"
+                class="rounded-xl"
+            >
             <x-filament::section>
                 <x-slot name="heading">
                     Catat Barang Temuan
@@ -356,10 +385,9 @@
 
                     <div class="grid gap-3 sm:grid-cols-2">
                         <x-filament::input
-                            type="number"
-                            min="0"
+                            type="text"
                             wire:model="foundQty"
-                            placeholder="Qty fisik"
+                            placeholder="Qty fisik, contoh: 1 CTN 1 PCK 1 PCS"
                         />
                         <x-filament::input
                             type="text"
@@ -390,32 +418,41 @@
                     </div>
                 </div>
             </x-filament::section>
+            </div>
             @endif
 
             @if (! $scannedItem && $recentScans)
-            <x-filament::section compact>
-                <x-slot name="heading">
-                    Scan Terakhir
-                </x-slot>
+            <div x-data="{ open: false }">
+                <x-filament::section compact>
+                    <x-slot name="heading">
+                        <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                            <span class="flex items-center gap-2.5">
+                                Scan Terakhir
+                                <x-filament::badge color="gray" size="lg">{{ count($recentScans) }}</x-filament::badge>
+                            </span>
+                            <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                        </button>
+                    </x-slot>
 
-                <div class="grid gap-2">
-                    @foreach ($recentScans as $scan)
-                        <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                            <div class="min-w-0">
-                                <div class="break-words font-semibold leading-snug text-gray-900 dark:text-white">{{ $scan['name'] }}</div>
-                                <div class="mt-1 text-xs text-gray-500">{{ $scan['code'] }} &bull; {{ $scan['at'] }}</div>
+                    <div x-show="open" class="grid gap-2">
+                        @foreach ($recentScans as $scan)
+                            <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                                <div class="min-w-0">
+                                    <div class="break-words font-semibold leading-snug text-gray-900 dark:text-white">{{ $scan['name'] }}</div>
+                                    <div class="mt-1 text-xs text-gray-500">{{ $scan['code'] }} &bull; {{ $scan['at'] }}</div>
+                                </div>
+                                <div class="mt-3">
+                                    <x-filament::badge
+                                        :color="$scan['status'] === 'matched' ? 'success' : ($scan['status'] === 'pending' ? 'gray' : 'warning')"
+                                    >
+                                        {{ $scan['status'] }}
+                                    </x-filament::badge>
+                                </div>
                             </div>
-                            <div class="mt-3">
-                                <x-filament::badge
-                                    :color="$scan['status'] === 'matched' ? 'success' : ($scan['status'] === 'pending' ? 'gray' : 'warning')"
-                                >
-                                    {{ $scan['status'] }}
-                                </x-filament::badge>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </x-filament::section>
+                        @endforeach
+                    </div>
+                </x-filament::section>
+            </div>
             @endif
 
             @if (! $scannedItem)
@@ -425,13 +462,14 @@
                 </x-slot>
 
                 <x-slot name="description">
-                    {{ $session->branch?->nama ?? 'Tanpa Cabang' }}
-                    &bull;
-                    {{ $session->checked_items }}/{{ $session->total_items }} item
-                    &bull; {{ $session->matched_items }} sesuai
-                    &bull; {{ $session->mismatched_items }} selisih
-                    &bull;
-                    <span class="font-mono" x-text="clock">{{ now()->format('H:i:s') }} WITA</span>
+                    <span class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm">
+                        <span>{{ $session->branch?->nama ?? 'Tanpa Cabang' }}</span>
+                        <span class="text-gray-300 dark:text-gray-600">&bull;</span>
+                        <span>{{ $session->checked_items }}/{{ $session->total_items }} item</span>
+                        <span class="text-success-600">{{ $session->matched_items }} sesuai</span>
+                        <span class="font-semibold text-danger-600">{{ $session->mismatched_items }} selisih</span>
+                        <span class="font-mono" x-text="clock">{{ now()->format('H:i:s') }} WITA</span>
+                    </span>
                 </x-slot>
 
                 <x-slot name="headerEnd">
@@ -457,7 +495,7 @@
                         type="button"
                         wire:click="backToSessionList"
                         color="gray"
-                        size="sm"
+                        size="md"
                         icon="heroicon-m-arrow-left"
                     >
                         Ganti Principal
@@ -466,122 +504,391 @@
             </x-filament::section>
 
             @php
-                $mismatchedItems = $session->items->where('status', \App\Enums\StockSessionItemStatus::Mismatched);
+                $comparisonDate = $this->getComparisonDateForSession($session);
+                $comparisonRows = $this->getComparisonRowsForSession($session)
+                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
+                    ->values();
+                $comparisonFoundItems = $session->foundItems
+                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
+                    ->values();
+                $comparisonSearch = trim($comparisonSearch ?? '');
+                $comparisonFilter = in_array($comparisonFilter, ['new', 'worse'], true)
+                    ? 'attention'
+                    : ($comparisonFilter ?: 'all');
+                $comparisonStatusMap = [
+                    'attention' => ['Baru Selisih', 'Selisih Memburuk'],
+                    'better' => ['Selisih Membaik'],
+                    'normal' => ['Sudah Normal'],
+                ];
+                $filteredComparisonRows = $comparisonRows
+                    ->when(isset($comparisonStatusMap[$comparisonFilter]), fn ($rows) => $rows->filter(fn ($row) => in_array($row['status'], $comparisonStatusMap[$comparisonFilter], true)))
+                    ->when($comparisonSearch !== '', fn ($rows) => $rows->filter(fn ($row) => str_contains(strtolower($row['kode_barang'] . ' ' . $row['nama_barang'] . ' ' . $row['status']), strtolower($comparisonSearch))));
+                $comparisonFilterOptions = [
+                    'all' => ['label' => 'Semua', 'count' => $comparisonRows->count()],
+                    'attention' => ['label' => 'Baru / Memburuk', 'count' => $comparisonRows->whereIn('status', ['Baru Selisih', 'Selisih Memburuk'])->count()],
+                    'better' => ['label' => 'Membaik', 'count' => $comparisonRows->where('status', 'Selisih Membaik')->count()],
+                    'normal' => ['label' => 'Normal', 'count' => $comparisonRows->where('status', 'Sudah Normal')->count()],
+                ];
             @endphp
-            @if ($mismatchedItems->isNotEmpty())
+            <div x-data="{ open: false }">
                 <x-filament::section>
                     <x-slot name="heading">
-                        <span class="flex items-center gap-2">
-                            Item Selisih
-                            <x-filament::badge color="danger" size="lg">{{ $mismatchedItems->count() }}</x-filament::badge>
-                        </span>
+                        <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                            <span class="flex items-center gap-2.5">
+                                Perbandingan
+                                <x-filament::badge :color="$comparisonRows->isNotEmpty() ? 'warning' : 'gray'" size="lg">{{ $comparisonRows->count() }}</x-filament::badge>
+                            </span>
+                            <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                        </button>
                     </x-slot>
 
-                    <div class="grid gap-3">
-                        @foreach ($mismatchedItems as $item)
-                            <button
-                                type="button"
-                                wire:click="startEditItem({{ $item->id }})"
-                                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-danger-400 hover:bg-danger-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-danger-500 dark:hover:bg-danger-950/10"
-                            >
-                                <div class="min-w-0">
-                                    <div class="font-mono text-xs font-semibold text-danger-600 dark:text-danger-400">{{ $item->kode_barang }}</div>
-                                    <div class="mt-1 break-words text-base font-semibold leading-snug text-gray-900 dark:text-white sm:text-lg">{{ $item->nama_barang }}</div>
-                                    <div class="mt-1 text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</div>
-                                </div>
-                                <div class="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-white/10">
-                                    <div>
-                                        <div class="text-xs text-gray-500">Selisih</div>
-                                        <div class="font-mono text-lg font-bold text-danger-600 dark:text-danger-400">{{ $item->selisih }}</div>
+                    <div x-show="open">
+                        <div class="mb-3 text-xs leading-relaxed text-gray-500">
+                            @if ($comparisonDate)
+                                Dibandingkan dengan stock opname terakhir: {{ \Carbon\Carbon::parse($comparisonDate)->format('d M Y') }}.
+                            @else
+                                Belum ada stock opname sebelumnya untuk principal/cabang ini.
+                            @endif
+                        </div>
+
+                        @if ($comparisonDate)
+                            <div class="mb-3">
+                                <select
+                                    wire:model.live="comparisonFilter"
+                                    class="w-full rounded-lg border border-primary-500 bg-primary-50 px-4 py-3 text-base font-bold text-primary-800 shadow-sm transition focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-primary-500 dark:bg-primary-950/30 dark:text-primary-200"
+                                >
+                                    @foreach ($comparisonFilterOptions as $value => $option)
+                                        <option value="{{ $value }}">{{ $option['label'] }} ({{ $option['count'] }})</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <x-filament::input
+                                    type="search"
+                                    wire:model.live.debounce.300ms="comparisonSearch"
+                                    placeholder="Cari kode, nama barang, atau status..."
+                                />
+                            </div>
+
+                            <div class="grid gap-2">
+                                @forelse ($filteredComparisonRows as $row)
+                                    @php
+                                        $sample = $row['to_item'] ?? $row['from_item'];
+                                        $statusColor = match ($row['status']) {
+                                            'Selisih Memburuk', 'Baru Selisih' => 'danger',
+                                            'Selisih Membaik', 'Sudah Normal' => 'success',
+                                            default => 'gray',
+                                        };
+                                    @endphp
+                                    <div class="rounded-lg border border-gray-200 bg-white px-3.5 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                                        <div class="grid gap-2.5">
+                                            <div class="grid grid-cols-[1fr_auto] items-start gap-2">
+                                                <div class="min-w-0">
+                                                    <div class="font-mono text-xs font-semibold text-primary-600 dark:text-primary-400">{{ $row['kode_barang'] }}</div>
+                                                    <div class="mt-0.5 break-words text-sm font-semibold leading-snug text-gray-900 dark:text-white">{{ $row['nama_barang'] }}</div>
+                                                </div>
+                                                <x-filament::badge :color="$statusColor" size="sm">{{ $row['status'] }}</x-filament::badge>
+                                            </div>
+
+                                            <div class="grid gap-1.5 border-t border-gray-100 pt-2.5 text-[11px] dark:border-white/10">
+                                                <div class="flex items-center justify-between gap-4">
+                                                    <div class="text-gray-500">Terakhir</div>
+                                                    <div class="text-right font-mono font-semibold text-gray-900 dark:text-white">{{ app(\App\Services\ReportService::class)->formatBaseQty($row['from_selisih'], $sample) }}</div>
+                                                </div>
+                                                <div class="flex items-center justify-between gap-4">
+                                                    <div class="text-gray-500">Sekarang</div>
+                                                    <div class="text-right font-mono font-semibold text-gray-900 dark:text-white">{{ app(\App\Services\ReportService::class)->formatBaseQty($row['to_selisih'], $sample) }}</div>
+                                                </div>
+                                                <div class="flex items-center justify-between gap-4">
+                                                    <div class="text-gray-500">Perubahan</div>
+                                                    <div class="text-right font-mono font-bold {{ $row['change'] === 0 ? 'text-gray-500' : ($row['change'] < 0 ? 'text-danger-600 dark:text-danger-400' : 'text-warning-600 dark:text-warning-400') }}">
+                                                        {{ app(\App\Services\ReportService::class)->formatBaseQty($row['change'], $sample) }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-2 text-sm font-semibold text-danger-700 dark:bg-danger-950/30 dark:text-danger-300">
-                                        Koreksi
-                                        <x-filament::icon icon="heroicon-m-pencil-square" class="h-4 w-4" />
-                                    </span>
-                                </div>
-                            </button>
-                        @endforeach
+                                @empty
+                                    <div class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700">
+                                        Tidak ada item selisih/perubahan yang cocok.
+                                    </div>
+                                @endforelse
+                            </div>
+                        @else
+                            <div class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700">
+                                Perbandingan akan muncul setelah ada stock opname sebelumnya.
+                            </div>
+                        @endif
                     </div>
                 </x-filament::section>
+            </div>
+
+            @if ($comparisonFoundItems->isNotEmpty())
+                <div x-data="{ open: false }">
+                    <x-filament::section>
+                        <x-slot name="heading">
+                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                                <span class="flex items-center gap-2.5">
+                                    Barang Temuan
+                                    <x-filament::badge color="warning" size="lg">{{ $comparisonFoundItems->count() }}</x-filament::badge>
+                                </span>
+                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                            </button>
+                        </x-slot>
+
+                        <div x-show="open" class="grid gap-3">
+                            @foreach ($comparisonFoundItems as $item)
+                                <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="min-w-0">
+                                            <div class="font-mono text-xs font-bold text-warning-600 dark:text-warning-400">{{ $item->kode_barang }}</div>
+                                            <div class="mt-1 break-words text-sm font-semibold leading-snug text-gray-900 dark:text-white">{{ $item->nama_barang }}</div>
+                                        </div>
+                                        <div class="shrink-0 text-right text-[11px] leading-4 text-gray-500 dark:text-gray-400">
+                                            <div>{{ $item->found_at?->translatedFormat('d M Y') ?? '-' }}</div>
+                                            <div class="font-mono">{{ $item->found_at?->format('H:i') ?? '-' }} WITA</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 grid gap-2 border-t border-gray-100 pt-2.5 text-xs dark:border-white/10">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <span class="text-gray-500">Qty fisik</span>
+                                            <span class="break-words text-right font-mono font-bold text-gray-900 dark:text-white">{{ $item->qty_aktual_display }}</span>
+                                        </div>
+                                        <div class="flex items-start justify-between gap-3">
+                                            <span class="text-gray-500">Petugas</span>
+                                            <span class="break-words text-right font-semibold text-gray-900 dark:text-white">{{ $item->foundBy?->name ?? '-' }}</span>
+                                        </div>
+                                        @if ($item->note)
+                                            <div class="border-t border-gray-100 pt-2 text-gray-600 dark:border-white/10 dark:text-gray-300">
+                                                <span class="font-semibold text-gray-500">Catatan:</span>
+                                                {{ $item->note }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </x-filament::section>
+                </div>
             @endif
 
             @php
-                $pendingItems = $session->items->where('status', \App\Enums\StockSessionItemStatus::Pending);
+                $checkedItems = $session->items
+                    ->reject(fn ($item) => $item->status === \App\Enums\StockSessionItemStatus::Pending)
+                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
+                    ->values();
+                $checkedSearch = trim($checkedSearch ?? '');
+                $filteredCheckedItems = $checkedSearch === ''
+                    ? $checkedItems
+                    : $checkedItems->filter(fn ($item) => str_contains(strtolower($item->kode_barang . ' ' . $item->nama_barang . ' ' . ($item->checkedBy?->name ?? '')), strtolower($checkedSearch)));
+            @endphp
+            @if ($checkedItems->isNotEmpty())
+                <div x-data="{ open: false }">
+                    <x-filament::section>
+                        <x-slot name="heading">
+                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                                <span class="flex items-center gap-2.5">
+                                    Sudah Dicek
+                                    <x-filament::badge color="success" size="lg">{{ $checkedItems->count() }}</x-filament::badge>
+                                </span>
+                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                            </button>
+                        </x-slot>
+
+                        <div x-show="open">
+                            <div class="mb-3">
+                                <x-filament::input
+                                    type="search"
+                                    wire:model.live.debounce.300ms="checkedSearch"
+                                    placeholder="Cari kode, nama barang, atau petugas..."
+                                />
+                            </div>
+
+                            <div class="grid gap-2">
+                            @forelse ($filteredCheckedItems->take(25) as $item)
+                                <button
+                                    type="button"
+                                    wire:click="startEditItem({{ $item->id }})"
+                                    class="w-full rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm transition hover:border-primary-400 hover:bg-primary-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary-500 dark:hover:bg-primary-950/10 sm:p-4"
+                                >
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="min-w-0">
+                                            <div class="font-mono text-xs font-semibold text-primary-600 dark:text-primary-400">{{ $item->kode_barang }}</div>
+                                            <div class="mt-1 break-words text-base font-semibold leading-snug text-gray-900 dark:text-white">{{ $item->nama_barang }}</div>
+                                            <div class="mt-1 text-sm text-gray-500">
+                                                Aktual: {{ $item->qty_aktual_display ?? '-' }}
+                                                &bull;
+                                                {{ $item->checkedBy?->name ?? '-' }}
+                                                &bull;
+                                                {{ $item->checked_at?->format('H:i') ?? '-' }}
+                                            </div>
+                                        </div>
+                                        <x-filament::badge
+                                            :color="match ($item->status) {
+                                                \App\Enums\StockSessionItemStatus::Matched => 'success',
+                                                \App\Enums\StockSessionItemStatus::Mismatched => 'danger',
+                                                \App\Enums\StockSessionItemStatus::Missing => 'warning',
+                                                default => 'gray',
+                                            }"
+                                        >
+                                            {{ $item->status === \App\Enums\StockSessionItemStatus::Missing ? 'tidak ada' : $item->status->value }}
+                                        </x-filament::badge>
+                                    </div>
+                                </button>
+                            @empty
+                                <div class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700">
+                                    Tidak ada item yang cocok.
+                                </div>
+                            @endforelse
+                            </div>
+                        </div>
+
+                        @if ($filteredCheckedItems->count() > 25)
+                            <div x-show="open" class="mt-3 text-center text-sm text-gray-400">
+                                + {{ $filteredCheckedItems->count() - 25 }} item lainnya
+                            </div>
+                        @endif
+                    </x-filament::section>
+                </div>
+            @endif
+
+            @php
+                $mismatchedItems = $session->items
+                    ->where('status', \App\Enums\StockSessionItemStatus::Mismatched)
+                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
+                    ->values();
+            @endphp
+            @if ($mismatchedItems->isNotEmpty())
+                <div x-data="{ open: {{ $mismatchedItems->count() <= 3 ? 'true' : 'false' }} }">
+                    <x-filament::section>
+                        <x-slot name="heading">
+                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                                <span class="flex items-center gap-2.5">
+                                    Item Selisih
+                                    <x-filament::badge color="danger" size="lg">{{ $mismatchedItems->count() }}</x-filament::badge>
+                                </span>
+                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                            </button>
+                        </x-slot>
+
+                        <div x-show="open" class="grid gap-3">
+                            @foreach ($mismatchedItems as $item)
+                                <button
+                                    type="button"
+                                    wire:click="startEditItem({{ $item->id }})"
+                                    class="w-full rounded-xl border border-gray-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-danger-400 hover:bg-danger-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-danger-500 dark:hover:bg-danger-950/10"
+                                >
+                                    <div class="min-w-0">
+                                        <div class="font-mono text-xs font-semibold text-danger-600 dark:text-danger-400">{{ $item->kode_barang }}</div>
+                                        <div class="mt-1 break-words text-base font-semibold leading-snug text-gray-900 dark:text-white sm:text-lg">{{ $item->nama_barang }}</div>
+                                        <div class="mt-1 text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</div>
+                                    </div>
+                                    <div class="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-white/10">
+                                        <div>
+                                            <div class="text-xs text-gray-500">Selisih</div>
+                                            <div class="font-mono text-lg font-bold text-danger-600 dark:text-danger-400">{{ $item->selisih }}</div>
+                                        </div>
+                                        <span class="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-2 text-sm font-semibold text-danger-700 dark:bg-danger-950/30 dark:text-danger-300">
+                                            Koreksi
+                                            <x-filament::icon icon="heroicon-m-pencil-square" class="h-4 w-4" />
+                                        </span>
+                                    </div>
+                                </button>
+                            @endforeach
+                        </div>
+                    </x-filament::section>
+                </div>
+            @endif
+
+            @php
+                $pendingItems = $session->items
+                    ->where('status', \App\Enums\StockSessionItemStatus::Pending)
+                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
+                    ->values();
                 $pendingSearch = trim($pendingSearch ?? '');
                 $filteredPendingItems = $pendingSearch === ''
                     ? $pendingItems
                     : $pendingItems->filter(fn ($item) => str_contains(strtolower($item->kode_barang . ' ' . $item->nama_barang), strtolower($pendingSearch)));
             @endphp
             @if ($pendingItems->isNotEmpty())
-                <x-filament::section>
-                    <x-slot name="heading">
-                        <span class="flex items-center gap-2">
-                            Belum Dicek
-                            <x-filament::badge color="gray" size="lg">{{ $pendingItems->count() }}</x-filament::badge>
-                        </span>
-                    </x-slot>
+                <div x-data="{ open: false }">
+                    <x-filament::section>
+                        <x-slot name="heading">
+                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                                <span class="flex items-center gap-2.5">
+                                    Belum Dicek
+                                    <x-filament::badge color="gray" size="lg">{{ $pendingItems->count() }}</x-filament::badge>
+                                </span>
+                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                            </button>
+                        </x-slot>
 
-                    <div class="mb-3">
-                        <x-filament::input
-                            type="search"
-                            wire:model.live.debounce.300ms="pendingSearch"
-                            placeholder="Cari kode atau nama barang..."
-                        />
-                    </div>
+                        <div x-show="open">
+                            <div class="mb-3">
+                                <x-filament::input
+                                    type="search"
+                                    wire:model.live.debounce.300ms="pendingSearch"
+                                    placeholder="Cari kode atau nama barang..."
+                                />
+                            </div>
 
-                    <div class="grid gap-2">
-                        @forelse ($filteredPendingItems->take(25) as $item)
-                            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900 sm:p-4">
-                                <button
-                                    type="button"
-                                    wire:click="startEditItem({{ $item->id }})"
-                                    class="flex w-full items-start gap-3 text-left"
-                                >
-                                    <x-filament::icon icon="heroicon-m-cube" class="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
-                                    <span class="min-w-0 flex-1">
-                                        <span class="block font-mono text-xs font-semibold text-primary-600 dark:text-primary-400">{{ $item->kode_barang }}</span>
-                                        <span class="mt-1 block break-words text-base font-semibold leading-snug text-gray-900 dark:text-white">{{ $item->nama_barang }}</span>
-                                        <span class="mt-1 block text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</span>
-                                    </span>
-                                </button>
+                            <div class="grid gap-2">
+                                @forelse ($filteredPendingItems->take(25) as $item)
+                                    <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900 sm:p-4">
+                                        <button
+                                            type="button"
+                                            wire:click="startEditItem({{ $item->id }})"
+                                            class="flex w-full items-start gap-3 text-left"
+                                        >
+                                            <x-filament::icon icon="heroicon-m-cube" class="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block font-mono text-xs font-semibold text-primary-600 dark:text-primary-400">{{ $item->kode_barang }}</span>
+                                                <span class="mt-1 block break-words text-base font-semibold leading-snug text-gray-900 dark:text-white">{{ $item->nama_barang }}</span>
+                                                <span class="mt-1 block text-sm text-gray-500">Sistem: {{ $this->formatSystemQty($item) }}</span>
+                                            </span>
+                                        </button>
 
-                                <div class="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-white/10">
-                                    <x-filament::button
-                                        type="button"
-                                        size="lg"
-                                        color="primary"
-                                        icon="heroicon-m-pencil-square"
-                                        class="w-full"
-                                        wire:click="startEditItem({{ $item->id }})"
-                                    >
-                                        Edit
-                                    </x-filament::button>
-                                    <x-filament::button
-                                        type="button"
-                                        size="lg"
-                                        color="gray"
-                                        icon="heroicon-m-eye-slash"
-                                        class="w-full"
-                                        x-data
-                                        x-on:click.prevent="if (confirm('Tandai item ini tidak ada fisik?')) { $wire.markItemMissing({{ $item->id }}) }"
-                                    >
-                                        Tidak Ada
-                                    </x-filament::button>
+                                        <div class="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-white/10">
+                                            <x-filament::button
+                                                type="button"
+                                                size="lg"
+                                                color="primary"
+                                                icon="heroicon-m-pencil-square"
+                                                class="w-full"
+                                                wire:click="startEditItem({{ $item->id }})"
+                                            >
+                                                Edit
+                                            </x-filament::button>
+                                            <x-filament::button
+                                                type="button"
+                                                size="lg"
+                                                color="gray"
+                                                icon="heroicon-m-eye-slash"
+                                                class="w-full"
+                                                x-data
+                                                x-on:click.prevent="if (confirm('Tandai item ini tidak ada fisik?')) { $wire.markItemMissing({{ $item->id }}) }"
+                                            >
+                                                Tidak Ada
+                                            </x-filament::button>
+                                        </div>
+                                    </div>
+                                @empty
+                                    <div class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700">
+                                        Tidak ada item yang cocok.
+                                    </div>
+                                @endforelse
+                            </div>
+
+                            @if ($filteredPendingItems->count() > 25)
+                                <div class="mt-3 text-center text-sm text-gray-400">
+                                    + {{ $filteredPendingItems->count() - 25 }} item lainnya
                                 </div>
-                            </div>
-                        @empty
-                            <div class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700">
-                                Tidak ada item yang cocok.
-                            </div>
-                        @endforelse
-                    </div>
-
-                    @if ($filteredPendingItems->count() > 25)
-                        <div class="mt-3 text-center text-sm text-gray-400">
-                            + {{ $filteredPendingItems->count() - 25 }} item lainnya
+                            @endif
                         </div>
-                    @endif
-                </x-filament::section>
+                    </x-filament::section>
+                </div>
             @endif
             @endif
 
@@ -757,6 +1064,8 @@
                         }
                     },
                 }"
+                x-on:click.outside="open = false"
+                x-on:keydown.escape.window="open = false"
                 class="fixed bottom-5 right-4 z-40 sm:bottom-6 sm:right-6"
                 wire:ignore
             >
@@ -821,3 +1130,25 @@
         @endif
     </div>
 </x-filament-panels::page>
+
+@push('styles')
+    <style>
+        @keyframes distora-candidate-pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+            }
+
+            30% {
+                box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.9), 0 0 24px rgba(245, 158, 11, 0.45);
+            }
+
+            65% {
+                box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.55), 0 0 14px rgba(245, 158, 11, 0.3);
+            }
+        }
+
+        .distora-candidate-flash {
+            animation: distora-candidate-pulse 0.9s ease-out;
+        }
+    </style>
+@endpush

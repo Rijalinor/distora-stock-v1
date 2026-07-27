@@ -1,6 +1,6 @@
 # Project Status
 
-Terakhir diperbarui: 2026-07-22
+Terakhir diperbarui: 2026-07-27
 
 ## Ringkasan
 
@@ -42,15 +42,20 @@ Status saat ini: **operasional internal / alpha stabil**.
 - [x] Generate sesi per principal.
 - [x] Assign petugas.
 - [x] Scan barcode atau kode barang.
+- [x] Pencarian barcode, kode, dan nama barang.
 - [x] Lookup barcode dibatasi ke item dalam sesi aktif.
 - [x] Pilihan kandidat jika barcode duplikat dalam sesi.
 - [x] Input qty aktual multi-level.
+- [x] Barang Temuan dengan qty teks bebas.
+- [x] Pencegahan Barang Temuan duplikat dalam satu sesi.
 - [x] Mark matched.
 - [x] Mark missing/tidak ada.
 - [x] Koreksi item selisih.
 - [x] Search daftar belum dicek.
 - [x] Edit item dari daftar belum dicek.
 - [x] Progress sesi otomatis.
+- [x] Panel collapse untuk daftar kerja.
+- [x] Daftar item terurut berdasarkan kode A-Z.
 
 ### Laporan
 
@@ -63,6 +68,9 @@ Status saat ini: **operasional internal / alpha stabil**.
 - [x] Selisih tampil dalam display unit, bukan base mentah.
 - [x] Kolom Plus/Minus dihapus dari laporan harian.
 - [x] Kode/barcode export Excel-safe.
+- [x] Perbandingan dengan stock opname terakhir.
+- [x] Laporan mobile sederhana untuk petugas.
+- [x] Laporan lengkap dan export tetap tersedia untuk admin.
 
 ### Testing
 
@@ -73,8 +81,12 @@ Status saat ini: **operasional internal / alpha stabil**.
 - [x] Scan duplicate barcode.
 - [x] Backup/restore Item Master.
 - [x] Export laporan display unit.
+- [x] Pencarian item tanpa barcode.
+- [x] Qty teks Barang Temuan.
+- [x] Pencegahan Barang Temuan duplikat.
+- [x] Pemilihan tanggal opname pembanding terakhir.
 
-Status terakhir: 12 test pass.
+Status terakhir: 23 test pass.
 
 ## Belum Ada / Belum Prioritas
 
@@ -112,11 +124,10 @@ Status terakhir: 12 test pass.
 
 | Metrik | Nilai |
 |---|---|
-| Test cases | 12 |
+| Test cases | 23 |
 | Test pass rate | 100% pada run terakhir |
 | PHP | ^8.2 |
 | Laravel | ^12.0 |
 | Filament | ^5.6 |
 | Database dev | SQLite |
 | Database prod | MySQL |
-
