@@ -11,12 +11,17 @@
                     return;
                 }
 
-                window.addEventListener('beforeinstallprompt', (event) => {
-                    event.preventDefault();
-                    this.deferredPrompt = event;
+                const prepareInstall = () => {
+                    this.deferredPrompt = window.distoraInstallPrompt;
                     this.canInstall = true;
                     this.installStatus = 'PWA siap dipasang';
-                });
+                };
+
+                if (window.distoraInstallPrompt) {
+                    prepareInstall();
+                }
+
+                window.addEventListener('distora-pwa-installable', prepareInstall);
 
                 window.addEventListener('appinstalled', () => {
                     this.deferredPrompt = null;

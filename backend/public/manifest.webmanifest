@@ -1,8 +1,8 @@
 {
-  "id": "/admin",
+  "id": "/admin/",
   "name": "Distora Stock",
   "short_name": "Distora Stock",
-  "start_url": "/admin/",
+  "start_url": "/admin/stock-scanning",
   "scope": "/admin/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
