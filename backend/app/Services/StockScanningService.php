@@ -10,6 +10,7 @@ use App\Models\StockSessionItem;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class StockScanningService
 {
@@ -37,7 +38,7 @@ class StockScanningService
     /**
      * @return Collection<int, StockSessionItem>
      */
-    public function findItemsByBarcode(StockSession $session, string $barcode): Collection
+    public function findItemsByBarcode(StockSession $session, string $barcode, bool $exactOnly = false): Collection
     {
         $barcode = trim($barcode);
         if ($barcode === '') {
@@ -50,7 +51,16 @@ class StockScanningService
             return $exactItems;
         }
 
+        if ($exactOnly || $this->isLikelyBarcode($barcode)) {
+            return collect();
+        }
+
         return $this->searchSessionItems($session, $barcode);
+    }
+
+    protected function isLikelyBarcode(string $value): bool
+    {
+        return preg_match('/^\d{6,}$/', $value) === 1;
     }
 
     /**
@@ -80,25 +90,88 @@ class StockScanningService
      */
     protected function searchSessionItems(StockSession $session, string $search): Collection
     {
-        $like = '%' . addcslashes($search, '%_\\') . '%';
+        $normalizedSearch = $this->normalizeSearchText($search);
 
         return StockSessionItem::query()
             ->where('stock_session_id', $session->id)
-            ->where(fn ($query) => $query
-                ->where('kode_barang', 'like', $like)
-                ->orWhere('nama_barang', 'like', $like)
-                ->orWhere('satuan', 'like', $like)
-                ->orWhereHas('itemMaster', fn ($query) => $query
-                    ->where('branch_id', $session->branch_id)
-                    ->where(fn ($query) => $query
-                        ->where('kode_barang', 'like', $like)
-                        ->orWhere('barcode', 'like', $like)
-                        ->orWhere('nama_barang', 'like', $like)
-                        ->orWhere('satuan', 'like', $like))))
             ->with('itemMaster')
-            ->orderBy('kode_barang')
-            ->limit(25)
-            ->get();
+            ->get()
+            ->map(fn (StockSessionItem $item) => [
+                'item' => $item,
+                'score' => $this->searchScore($item, $normalizedSearch),
+                'code' => $item->kode_barang,
+            ])
+            ->filter(fn (array $result) => $result['score'] > 0)
+            ->sortBy([
+                ['score', 'desc'],
+                ['code', 'asc'],
+            ])
+            ->take(25)
+            ->pluck('item')
+            ->values();
+    }
+
+    protected function searchScore(StockSessionItem $item, string $search): float
+    {
+        $values = collect([
+            $item->kode_barang,
+            $item->nama_barang,
+            $item->satuan,
+            $item->itemMaster?->kode_barang,
+            $item->itemMaster?->barcode,
+            $item->itemMaster?->nama_barang,
+        ])
+            ->filter()
+            ->map(fn ($value) => $this->normalizeSearchText((string) $value))
+            ->unique();
+
+        if ($values->contains($search)) {
+            return 1000;
+        }
+
+        if ($values->contains(fn (string $value) => str_starts_with($value, $search))) {
+            return 900;
+        }
+
+        if ($values->contains(fn (string $value) => str_contains($value, $search))) {
+            return 800;
+        }
+
+        if (mb_strlen($search) < 4) {
+            return 0;
+        }
+
+        $searchWords = array_values(array_filter(explode(' ', $search)));
+        $bestWordScores = collect($searchWords)->map(function (string $searchWord) use ($values): float {
+            return $values
+                ->flatMap(fn (string $value) => explode(' ', $value))
+                ->map(fn (string $word) => $this->similarity($searchWord, $word))
+                ->max() ?? 0;
+        });
+
+        $minimumSimilarity = $bestWordScores->min() ?? 0;
+
+        if ($minimumSimilarity < 70) {
+            return 0;
+        }
+
+        return 500 + $bestWordScores->average();
+    }
+
+    protected function normalizeSearchText(string $value): string
+    {
+        return (string) Str::of($value)
+            ->ascii()
+            ->lower()
+            ->replaceMatches('/[^a-z0-9]+/', ' ')
+            ->squish();
+    }
+
+    protected function similarity(string $first, string $second): float
+    {
+        similar_text($first, $second, $percentage);
+
+        return $percentage;
     }
 
     public function acquireLock(StockSessionItem $item, User $officer): StockSessionItem

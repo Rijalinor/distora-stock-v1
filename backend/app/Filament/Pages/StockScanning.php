@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Enums\StockSessionItemStatus;
 use App\Enums\StockSessionStatus;
 use App\Enums\UserRole;
+use App\Models\StockFoundItem;
 use App\Models\StockSession;
 use App\Models\StockSessionItem;
 use App\Services\ReportService;
@@ -57,11 +58,30 @@ class StockScanning extends Page
 
     public string $comparisonSearch = '';
 
-    public string $comparisonFilter = 'all';
+    public string $comparisonFilter = 'changed';
+
+    public int $comparisonLimit = 10;
+
+    public int $foundItemsLimit = 10;
+
+    public int $mismatchedItemsLimit = 10;
 
     public ?string $notFoundBarcode = null;
 
     public string $foundItemName = '';
+
+    public ?int $foundItemMasterId = null;
+
+    public string $foundSystemQtyDisplay = '';
+
+    /** @var array<int, string> */
+    public array $foundQtyLabels = [];
+
+    /** @var array<int, int> */
+    public array $foundQtyFactors = [];
+
+    /** @var array<int, int|string> */
+    public array $foundQtyLevels = [];
 
     public string $foundQty = '';
 
@@ -125,7 +145,7 @@ class StockScanning extends Page
         $this->resetScanState();
     }
 
-    public function scanBarcode(?string $barcode = null): void
+    public function scanBarcode(?string $barcode = null, bool $exactOnly = false): void
     {
         if (! $this->ensureSelectedSessionAccess()) {
             return;
@@ -140,7 +160,7 @@ class StockScanning extends Page
         }
 
         $session = StockSession::findOrFail($this->selectedSessionId);
-        $items = app(StockScanningService::class)->findItemsByBarcode($session, $this->barcode);
+        $items = app(StockScanningService::class)->findItemsByBarcode($session, $this->barcode, $exactOnly);
 
         if ($items->isEmpty()) {
             $existingFoundItem = app(StockFoundItemService::class)->findExisting($session, $this->barcode);
@@ -158,14 +178,31 @@ class StockScanning extends Page
                 return;
             }
 
+            $foundItemService = app(StockFoundItemService::class);
+            $itemMaster = $foundItemService->findItemMaster($session, $this->barcode);
+
             $this->notFoundBarcode = trim($this->barcode);
-            $this->foundItemName = $this->notFoundBarcode;
-            $this->foundQty = '1 PCS';
+            $this->foundItemMasterId = $itemMaster?->id;
+            $this->foundItemName = $itemMaster?->nama_barang ?? '';
+            $this->foundQtyFactors = $itemMaster
+                ? ($itemMaster->getQtyFactorsArray() ?: StockScanningService::parseConversionFactors($itemMaster->nama_barang))
+                : [];
+            $foundLevelsCount = count($this->foundQtyFactors) + 1;
+            $this->foundQtyLabels = $itemMaster
+                ? array_pad(array_slice($itemMaster->getQtyLabelsArray(), 0, $foundLevelsCount), $foundLevelsCount, 'PCS')
+                : [];
+            $this->foundQtyLevels = $itemMaster ? array_fill(0, $foundLevelsCount, 0) : [];
+            $this->foundSystemQtyDisplay = $itemMaster
+                ? collect($this->foundQtyLabels)->map(fn (string $label) => "0 {$label}")->implode(' ')
+                : '';
+            $this->foundQty = $itemMaster ? '' : '1 PCS';
             $this->dispatch('stock-found-item-ready');
 
             Notification::make()
-                ->title('Barang tidak ditemukan')
-                ->body('Barcode, kode, atau nama barang tidak ada di sesi principal ini. Bisa dicatat sebagai barang temuan.')
+                ->title($itemMaster ? 'Barang tidak ada di sesi' : 'Barang tidak ditemukan')
+                ->body($itemMaster
+                    ? 'Barang ditemukan di Item Master. Stok sistem pada sesi ini dianggap 0 dan dapat dicatat sebagai barang temuan.'
+                    : 'Barcode, kode, atau nama barang tidak ada di sesi principal ini. Bisa dicatat sebagai barang temuan.')
                 ->warning()
                 ->send();
 
@@ -263,9 +300,10 @@ class StockScanning extends Page
         app(StockScanningService::class)->markAsMatched($this->scannedItem, Auth::user());
 
         Notification::make()
-            ->title('Sesuai')
-            ->body($this->scannedItem->nama_barang . ' — qty sesuai sistem.')
+            ->title('Berhasil disimpan')
+            ->body("{$this->scannedItem->nama_barang} — aktual: {$this->scannedItem->qty_sistem_display}")
             ->success()
+            ->duration(2500)
             ->send();
 
         $this->resetScanState();
@@ -351,9 +389,10 @@ class StockScanning extends Page
         $item = $this->scannedItem->fresh();
 
         Notification::make()
-            ->title($item->status === StockSessionItemStatus::Matched ? 'Sesuai' : 'Selisih tercatat')
+            ->title('Berhasil disimpan')
             ->body("{$item->nama_barang} — aktual: {$item->qty_aktual_display}")
             ->color($item->status === StockSessionItemStatus::Matched ? 'success' : 'warning')
+            ->duration(2500)
             ->send();
 
         $this->resetScanState();
@@ -420,13 +459,32 @@ class StockScanning extends Page
             return;
         }
 
+        if (blank($this->foundItemName) || (! $this->foundItemMasterId && blank($this->foundQty))) {
+            Notification::make()
+                ->title('Data belum lengkap')
+                ->body('Nama barang dan qty fisik wajib diisi.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         $session = StockSession::findOrFail($this->selectedSessionId);
+        $qtyDisplay = $this->foundQty;
+        $qtyBase = null;
+
+        if ($this->foundItemMasterId) {
+            $levels = array_map(fn ($value) => max(0, (int) $value), $this->foundQtyLevels);
+            $qtyDisplay = StockScanningService::buildQtyDisplayFromLabels($levels, $this->foundQtyLabels);
+            $qtyBase = StockScanningService::calculateBaseQuantity($levels, $this->foundQtyFactors);
+        }
 
         try {
             app(StockFoundItemService::class)->recordFoundItem($session, [
                 'kode_barang' => $this->notFoundBarcode,
                 'nama_barang' => $this->foundItemName ?: $this->notFoundBarcode,
-                'qty_aktual_display' => $this->foundQty,
+                'qty_aktual_display' => $qtyDisplay,
+                'qty_aktual_base' => $qtyBase,
                 'suspected_item_master_id' => $this->suspectedItemMasterId,
                 'note' => $this->foundNote,
             ], Auth::user());
@@ -443,9 +501,10 @@ class StockScanning extends Page
         }
 
         Notification::make()
-            ->title('Barang temuan tercatat')
-            ->body($this->foundItemName ?: $this->notFoundBarcode)
+            ->title('Berhasil disimpan')
+            ->body(($this->foundItemName ?: $this->notFoundBarcode) . " — aktual: {$qtyDisplay}")
             ->success()
+            ->duration(2500)
             ->send();
 
         $this->resetScanState(false);
@@ -457,12 +516,8 @@ class StockScanning extends Page
             return null;
         }
 
-        $session = StockSession::with([
-            'principal',
-            'items' => fn ($q) => $q->with(['checkedBy', 'lockedBy'])->orderBy('status')->orderBy('nama_barang'),
-            'items.itemMaster',
-            'foundItems.foundBy',
-        ])
+        $session = StockSession::with('principal')
+            ->withCount('foundItems')
             ->find($this->selectedSessionId);
 
         if (! $session) {
@@ -473,6 +528,81 @@ class StockScanning extends Page
         return $session;
     }
 
+    public function loadMoreComparison(): void
+    {
+        $this->comparisonLimit += 10;
+    }
+
+    public function loadMoreFoundItems(): void
+    {
+        $this->foundItemsLimit += 10;
+    }
+
+    public function loadMoreMismatchedItems(): void
+    {
+        $this->mismatchedItemsLimit += 10;
+    }
+    public function getFoundItemsData()
+    {
+        return StockFoundItem::query()
+            ->with('foundBy')
+            ->where('stock_session_id', $this->selectedSessionId)
+            ->orderBy('kode_barang')
+            ->limit($this->foundItemsLimit)
+            ->get();
+    }
+    public function getPendingItemsData(): array
+    {
+        $query = StockSessionItem::query()
+            ->with('itemMaster')
+            ->where('stock_session_id', $this->selectedSessionId)
+            ->where('status', StockSessionItemStatus::Pending->value)
+            ->when(trim($this->pendingSearch) !== '', function ($query): void {
+                $search = '%' . trim($this->pendingSearch) . '%';
+                $query->where(fn ($query) => $query
+                    ->where('kode_barang', 'like', $search)
+                    ->orWhere('nama_barang', 'like', $search));
+            });
+
+        return [
+            'items' => (clone $query)->orderBy('kode_barang')->limit(25)->get(),
+            'total' => $query->count(),
+        ];
+    }
+
+    public function getCheckedItemsData(): array
+    {
+        $query = StockSessionItem::query()
+            ->with(['checkedBy', 'itemMaster'])
+            ->where('stock_session_id', $this->selectedSessionId)
+            ->where('status', '!=', StockSessionItemStatus::Pending->value)
+            ->when(trim($this->checkedSearch) !== '', function ($query): void {
+                $search = '%' . trim($this->checkedSearch) . '%';
+                $query->where(function ($query) use ($search): void {
+                    $query->where('kode_barang', 'like', $search)
+                        ->orWhere('nama_barang', 'like', $search)
+                        ->orWhereHas('checkedBy', fn ($query) => $query->where('name', 'like', $search));
+                });
+            });
+
+        return [
+            'items' => (clone $query)->orderBy('kode_barang')->limit(25)->get(),
+            'total' => $query->count(),
+        ];
+    }
+
+    public function getMismatchedItemsData(): array
+    {
+        $query = StockSessionItem::query()
+            ->with('itemMaster')
+            ->where('stock_session_id', $this->selectedSessionId)
+            ->where('status', StockSessionItemStatus::Mismatched->value);
+
+        return [
+            'items' => (clone $query)->orderBy('kode_barang')->limit($this->mismatchedItemsLimit)->get(),
+            'total' => $query->count(),
+        ];
+    }
     public function getQtyLabels(): array
     {
         if (! $this->scannedItem) {
@@ -645,8 +775,16 @@ class StockScanning extends Page
         $this->pendingSearch = '';
         $this->checkedSearch = '';
         $this->comparisonSearch = '';
-        $this->comparisonFilter = 'all';
+        $this->comparisonFilter = 'changed';
+        $this->comparisonLimit = 10;
+        $this->foundItemsLimit = 10;
+        $this->mismatchedItemsLimit = 10;
         $this->foundItemName = '';
+        $this->foundItemMasterId = null;
+        $this->foundSystemQtyDisplay = '';
+        $this->foundQtyLabels = [];
+        $this->foundQtyFactors = [];
+        $this->foundQtyLevels = [];
         $this->foundQty = '';
         $this->suspectedItemMasterId = null;
         $this->foundNote = '';

@@ -17,6 +17,7 @@ use App\Models\StockSessionItem;
 use App\Models\User;
 use App\Services\CsvImportService;
 use App\Services\ItemMasterBackupService;
+use App\Services\ItemMasterTransferService;
 use App\Services\ReportService;
 use App\Services\StockFoundItemService;
 use App\Services\StockScanningService;
@@ -343,6 +344,94 @@ class StockOpnameServicesTest extends TestCase
     }
 
     /** @test */
+    public function it_copies_one_principal_item_master_between_branches()
+    {
+        $sourceBranch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $targetBranch = Branch::create([
+            'kode' => 'TRANSFER',
+            'nama' => 'Cabang Transfer',
+            'status' => true,
+        ]);
+        $principal = Principal::create([
+            'kode' => 'PTRANSFER',
+            'nama' => 'Principal Transfer',
+            'status' => true,
+        ]);
+        $otherPrincipal = Principal::create([
+            'kode' => 'POTHER',
+            'nama' => 'Principal Lain',
+            'status' => true,
+        ]);
+
+        ItemMaster::create([
+            'branch_id' => $sourceBranch->id,
+            'kode_barang' => 'COPY-001',
+            'barcode' => '899COPY001',
+            'nama_barang' => 'Barang Copy Baru',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCS',
+            'qty_structure' => [
+                ['label' => 'CTN', 'factor' => 12],
+                ['label' => 'PCS', 'factor' => 1],
+            ],
+            'status' => true,
+        ]);
+        ItemMaster::create([
+            'branch_id' => $sourceBranch->id,
+            'kode_barang' => 'COPY-002',
+            'barcode' => '899COPY002',
+            'nama_barang' => 'Barang Copy Update',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+        ItemMaster::create([
+            'branch_id' => $sourceBranch->id,
+            'kode_barang' => 'SKIP-OTHER',
+            'nama_barang' => 'Principal Lain',
+            'principal_id' => $otherPrincipal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+        ItemMaster::create([
+            'branch_id' => $targetBranch->id,
+            'kode_barang' => 'COPY-002',
+            'nama_barang' => 'Nama Lama',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => false,
+        ]);
+
+        $stats = app(ItemMasterTransferService::class)->copyPrincipal(
+            $sourceBranch->id,
+            $targetBranch->id,
+            $principal->id
+        );
+
+        $this->assertSame(['total' => 2, 'created' => 1, 'updated' => 1], $stats);
+        $this->assertDatabaseHas('item_masters', [
+            'branch_id' => $targetBranch->id,
+            'kode_barang' => 'COPY-001',
+            'barcode' => '899COPY001',
+            'nama_barang' => 'Barang Copy Baru',
+        ]);
+        $this->assertDatabaseHas('item_masters', [
+            'branch_id' => $targetBranch->id,
+            'kode_barang' => 'COPY-002',
+            'nama_barang' => 'Barang Copy Update',
+            'status' => true,
+        ]);
+        $this->assertDatabaseMissing('item_masters', [
+            'branch_id' => $targetBranch->id,
+            'kode_barang' => 'SKIP-OTHER',
+        ]);
+        $this->assertDatabaseHas('item_masters', [
+            'branch_id' => $sourceBranch->id,
+            'kode_barang' => 'COPY-001',
+        ]);
+    }
+
+    /** @test */
     public function it_returns_multiple_session_items_for_duplicate_barcode()
     {
         $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
@@ -451,6 +540,90 @@ class StockOpnameServicesTest extends TestCase
 
         $this->assertCount(1, $items);
         $this->assertEquals('MILK-001', $items->first()->kode_barang);
+    }
+
+    /** @test */
+    public function it_ranks_the_closest_item_name_when_search_text_has_typos()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'PFUZZY',
+            'nama' => 'Principal Fuzzy Search',
+            'status' => true,
+        ]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::Open,
+            'total_items' => 3,
+        ]);
+
+        foreach ([
+            ['MILK-001', 'Susu Coklat Botol 250ML'],
+            ['MILK-002', 'Susu Vanilla Kotak 250ML'],
+            ['SOAP-001', 'Sabun Mandi Batang'],
+        ] as [$code, $name]) {
+            StockSessionItem::create([
+                'stock_session_id' => $session->id,
+                'kode_barang' => $code,
+                'nama_barang' => $name,
+                'satuan' => 'PCS',
+                'qty_sistem_display' => '5 PCS',
+                'qty_sistem_base' => 5,
+                'status' => StockSessionItemStatus::Pending,
+            ]);
+        }
+
+        $items = app(StockScanningService::class)->findItemsByBarcode($session, 'cklat botl');
+
+        $this->assertCount(1, $items);
+        $this->assertEquals('MILK-001', $items->first()->kode_barang);
+    }
+
+    /** @test */
+    public function it_does_not_suggest_similar_items_for_an_unknown_scanned_barcode()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'PEXACTSCAN',
+            'nama' => 'Principal Exact Scan',
+            'status' => true,
+        ]);
+        $itemMaster = ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'SCAN-ITEM-001',
+            'barcode' => '8991234567890',
+            'nama_barang' => 'Barang Dengan Barcode',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::Open,
+            'total_items' => 1,
+        ]);
+        StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'item_master_id' => $itemMaster->id,
+            'kode_barang' => 'SCAN-ITEM-001',
+            'nama_barang' => 'Barang Dengan Barcode',
+            'satuan' => 'PCS',
+            'qty_sistem_display' => '5 PCS',
+            'qty_sistem_base' => 5,
+            'status' => StockSessionItemStatus::Pending,
+        ]);
+        $service = app(StockScanningService::class);
+
+        $this->assertTrue($service->findItemsByBarcode($session, '8991234567899')->isEmpty());
+        $this->assertTrue($service->findItemsByBarcode($session, 'SCAN-ITEM-002', true)->isEmpty());
+        $this->assertEquals(
+            $itemMaster->id,
+            app(StockFoundItemService::class)->findItemMaster($session, '8991234567890')?->id
+        );
     }
 
     /** @test */
@@ -730,11 +903,11 @@ class StockOpnameServicesTest extends TestCase
         $this->assertEquals(-2, $row['from_selisih']);
         $this->assertEquals(-3, $row['to_selisih']);
         $this->assertEquals(-1, $row['change']);
-        $this->assertEquals('Selisih Memburuk', $row['status']);
+        $this->assertEquals('Berubah', $row['status']);
 
         $csv = app(ReportService::class)->buildSelisihComparisonCsv('2026-07-04', '2026-07-05');
         $this->assertStringContainsString('Perubahan', $csv);
-        $this->assertStringContainsString('Selisih Memburuk', $csv);
+        $this->assertStringContainsString('Berubah', $csv);
     }
 
     /** @test */
@@ -886,6 +1059,20 @@ class StockOpnameServicesTest extends TestCase
             'qty_aktual_display' => '1 CTN 1 PCK 1 PCS',
             'qty_aktual_base' => 1,
         ]);
+
+        $structuredItem = app(StockFoundItemService::class)->recordFoundItem($session, [
+            'kode_barang' => 'FOUND-STRUCTURED-001',
+            'nama_barang' => 'Barang Temuan Terstruktur',
+            'qty_aktual_display' => '1 CTN 1 PCS',
+            'qty_aktual_base' => 13,
+        ], $officer);
+
+        $this->assertDatabaseHas('stock_found_items', [
+            'kode_barang' => 'FOUND-STRUCTURED-001',
+            'qty_aktual_display' => '1 CTN 1 PCS',
+            'qty_aktual_base' => 13,
+        ]);
+        $this->assertEquals('+1 CTN 1 PCS', app(ReportService::class)->formatFoundQty($structuredItem));
     }
 
     /** @test */
@@ -957,7 +1144,12 @@ class StockOpnameServicesTest extends TestCase
             'status' => StockSessionItemStatus::Pending,
         ]);
 
-        $this->assertEquals('13346 PCS', app(ReportService::class)->formatBaseQty($item->qty_sistem_base, $item));
+        $reportService = app(ReportService::class);
+
+        $this->assertEquals('13346 PCS', $reportService->formatBaseQty($item->qty_sistem_base, $item));
+        $this->assertEquals('+5 PCS', $reportService->formatSignedBaseQty(5, $item));
+        $this->assertEquals('-5 PCS', $reportService->formatSignedBaseQty(-5, $item));
+        $this->assertEquals('0 PCS', $reportService->formatSignedBaseQty(0, $item));
     }
 
     /** @test */

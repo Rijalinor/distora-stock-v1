@@ -11,7 +11,7 @@ set "NGROK_URL=https://unremonstrating-inconstantly-cynthia.ngrok-free.dev"
 set "CLOUDFLARE_TUNNEL_NAME="
 set "TUNNEL=%~1"
 
-if "%TUNNEL%"=="" set "TUNNEL=cloudflare"
+if "%TUNNEL%"=="" set "TUNNEL=none"
 
 echo ========================================
 echo  DISTORA STOCK - START
@@ -38,6 +38,17 @@ if exist "%XAMPP%\mysql_start.bat" (
 )
 
 timeout /t 4 /nobreak >nul
+
+echo Membersihkan cache Laravel...
+pushd "%BACKEND%"
+php artisan optimize:clear
+if errorlevel 1 (
+    popd
+    echo Gagal membersihkan cache Laravel.
+    pause
+    exit /b 1
+)
+popd
 
 echo Membuka Laravel...
 start "Distora Laravel" /min cmd /k "cd /d ""%BACKEND%"" && php artisan serve --host=127.0.0.1 --port=%APP_PORT%"
@@ -68,7 +79,7 @@ if errorlevel 1 (
         start "Distora ngrok" /min cmd /k ""%NGROK_EXE%" http %APP_PORT%"
     ) else (
         echo ngrok belum ada di PATH dan tidak ditemukan di %NGROK_EXE%.
-        echo Install ngrok atau jalankan: START-DISTORA.bat none
+        echo Install ngrok atau jalankan: START-DISTORA.bat
     )
 ) else (
     echo Membuka ngrok...

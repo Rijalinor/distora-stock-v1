@@ -134,7 +134,7 @@
                     : 0;
             @endphp
 
-            @if (! $scannedItem)
+            @if (! $scannedItem && ! $scanCandidates && ! $notFoundBarcode)
             <x-filament::section>
                 <x-slot name="heading">
                     <span class="text-2xl sm:text-3xl">Scan Barcode</span>
@@ -268,7 +268,7 @@
                             this.status = 'Kamera dimatikan';
                         },
                     }"
-                    x-on:barcode-detected.window="$wire.scanBarcode($event.detail.value)"
+                    x-on:barcode-detected.window="$wire.scanBarcode($event.detail.value, true)"
                     class="space-y-5"
                 >
                     <div class="overflow-hidden rounded-xl border border-gray-200 bg-gray-950 shadow-sm ring-1 ring-black/5 dark:border-gray-700 dark:ring-white/10">
@@ -320,11 +320,26 @@
             >
             <x-filament::section>
                 <x-slot name="heading">
-                    Pilih Barang
+                    Pilih Kode Barang
                 </x-slot>
 
                 <x-slot name="description">
                     Pencarian {{ $lastScannedBarcode }} cocok dengan beberapa item. Pilih barang yang sedang dihitung.
+                </x-slot>
+
+                <x-slot name="headerEnd">
+                    <div class="flex items-center gap-2">
+                        <x-filament::badge color="warning">{{ count($scanCandidates) }} pilihan</x-filament::badge>
+                        <x-filament::button
+                            type="button"
+                            wire:click="resetScanState"
+                            color="gray"
+                            size="sm"
+                            icon="heroicon-m-arrow-left"
+                        >
+                            Kembali
+                        </x-filament::button>
+                    </div>
                 </x-slot>
 
                 <div class="grid gap-3 sm:grid-cols-2">
@@ -368,54 +383,109 @@
                 class="rounded-xl"
             >
             <x-filament::section>
-                <x-slot name="heading">
-                    Catat Barang Temuan
-                </x-slot>
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <x-filament::button
+                            type="button"
+                            wire:click="resetScanState"
+                            color="gray"
+                            size="sm"
+                            icon="heroicon-m-arrow-left"
+                        >
+                            Kembali
+                        </x-filament::button>
+                        <x-filament::badge color="warning">Barang Temuan</x-filament::badge>
+                    </div>
 
-                <x-slot name="description">
-                    Barcode/kode {{ $notFoundBarcode }} tidak ada di sesi ini.
-                </x-slot>
+                    @if ($foundItemMasterId)
+                        <div class="space-y-2">
+                            <div class="break-words text-lg font-bold leading-snug text-gray-950 dark:text-white">
+                                {{ $foundItemName }}
+                            </div>
+                            <div class="font-mono text-sm font-semibold text-warning-600 dark:text-warning-400">
+                                {{ $notFoundBarcode }}
+                            </div>
+                            <div class="text-xs text-gray-500">Tidak terdaftar di sesi aktif</div>
 
-                <div class="grid gap-3">
-                    <x-filament::input
-                        type="text"
-                        wire:model="foundItemName"
-                        placeholder="Nama barang"
-                    />
+                        </div>
+                    @else
+                        <div class="space-y-2">
+                            <div class="font-mono text-sm font-semibold text-warning-600 dark:text-warning-400">
+                                {{ $notFoundBarcode }}
+                            </div>
+                            <div class="text-xs text-gray-500">Tidak terdaftar di sesi aktif</div>
 
-                    <div class="grid gap-3 sm:grid-cols-2">
-                        <x-filament::input
-                            type="text"
-                            wire:model="foundQty"
-                            placeholder="Qty fisik, contoh: 1 CTN 1 PCK 1 PCS"
-                        />
-                        <x-filament::input
+                            <div>
+                                <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                    Nama Barang
+                                </label>
+                                <x-filament::input.wrapper>
+                                    <x-filament::input
+                                    type="text"
+                                    wire:model="foundItemName"
+                                    placeholder="Ketik nama barang"
+                                />
+                                </x-filament::input.wrapper>
+                            </div>
+                        </div>
+                    @endif
+
+                    <div>
+                        <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Qty Fisik
+                        </label>
+                        @if ($foundItemMasterId)
+                            <div class="grid gap-2 sm:gap-4" style="grid-template-columns: repeat({{ count($foundQtyLabels) }}, minmax(0, 1fr))">
+                                @foreach ($foundQtyLabels as $index => $label)
+                                    <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                                        <label class="mb-2 block text-center text-xs font-semibold uppercase text-gray-500">
+                                            {{ $label }}
+                                        </label>
+                                        <x-filament::input.wrapper>
+                                            <x-filament::input
+                                            type="number"
+                                            min="0"
+                                            wire:model="foundQtyLevels.{{ $index }}"
+                                            class="text-center text-2xl font-bold"
+                                        />
+                                        </x-filament::input.wrapper>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <x-filament::input.wrapper>
+                                <x-filament::input
+                                type="text"
+                                wire:model="foundQty"
+                                placeholder="Qty fisik, contoh: 1 CTN 1 PCK 1 PCS"
+                            />
+                            </x-filament::input.wrapper>
+                        @endif
+                    </div>
+
+                    <div>
+                        <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Catatan <span class="font-normal text-gray-400">(opsional)</span>
+                        </label>
+                        <x-filament::input.wrapper>
+                            <x-filament::input
                             type="text"
                             wire:model="foundNote"
                             placeholder="Catatan / dugaan tertukar"
                         />
+                        </x-filament::input.wrapper>
                     </div>
 
-                    <div class="grid gap-2 sm:grid-cols-2">
-                        <x-filament::button
-                            type="button"
-                            color="warning"
-                            size="lg"
-                            icon="heroicon-m-plus-circle"
-                            wire:click="recordFoundItem"
-                        >
-                            Simpan Temuan
-                        </x-filament::button>
-                        <x-filament::button
-                            type="button"
-                            color="gray"
-                            size="lg"
-                            icon="heroicon-m-x-mark"
-                            wire:click="resetScanState"
-                        >
-                            Batal
-                        </x-filament::button>
-                    </div>
+                    <x-filament::button
+                        type="button"
+                        color="warning"
+                        size="xl"
+                        icon="heroicon-m-plus-circle"
+                        class="w-full"
+                        wire:click="recordFoundItem"
+                    >
+                        Simpan Barang Temuan
+                    </x-filament::button>
                 </div>
             </x-filament::section>
             </div>
@@ -508,26 +578,23 @@
                 $comparisonRows = $this->getComparisonRowsForSession($session)
                     ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
                     ->values();
-                $comparisonFoundItems = $session->foundItems
-                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
-                    ->values();
+                $comparisonFoundItems = $this->getFoundItemsData();
                 $comparisonSearch = trim($comparisonSearch ?? '');
-                $comparisonFilter = in_array($comparisonFilter, ['new', 'worse'], true)
-                    ? 'attention'
-                    : ($comparisonFilter ?: 'all');
+                $comparisonFilter = in_array($comparisonFilter, ['changed', 'unchanged', 'normal'], true)
+                    ? $comparisonFilter
+                    : 'changed';
                 $comparisonStatusMap = [
-                    'attention' => ['Baru Selisih', 'Selisih Memburuk'],
-                    'better' => ['Selisih Membaik'],
+                    'changed' => ['Berubah'],
+                    'unchanged' => ['Tidak Berubah'],
                     'normal' => ['Sudah Normal'],
                 ];
                 $filteredComparisonRows = $comparisonRows
                     ->when(isset($comparisonStatusMap[$comparisonFilter]), fn ($rows) => $rows->filter(fn ($row) => in_array($row['status'], $comparisonStatusMap[$comparisonFilter], true)))
                     ->when($comparisonSearch !== '', fn ($rows) => $rows->filter(fn ($row) => str_contains(strtolower($row['kode_barang'] . ' ' . $row['nama_barang'] . ' ' . $row['status']), strtolower($comparisonSearch))));
                 $comparisonFilterOptions = [
-                    'all' => ['label' => 'Semua', 'count' => $comparisonRows->count()],
-                    'attention' => ['label' => 'Baru / Memburuk', 'count' => $comparisonRows->whereIn('status', ['Baru Selisih', 'Selisih Memburuk'])->count()],
-                    'better' => ['label' => 'Membaik', 'count' => $comparisonRows->where('status', 'Selisih Membaik')->count()],
-                    'normal' => ['label' => 'Normal', 'count' => $comparisonRows->where('status', 'Sudah Normal')->count()],
+                    'changed' => ['label' => 'Berubah', 'count' => $comparisonRows->where('status', 'Berubah')->count()],
+                    'unchanged' => ['label' => 'Tidak Berubah', 'count' => $comparisonRows->where('status', 'Tidak Berubah')->count()],
+                    'normal' => ['label' => 'Sudah Normal', 'count' => $comparisonRows->where('status', 'Sudah Normal')->count()],
                 ];
             @endphp
             <div x-data="{ open: false }">
@@ -572,12 +639,13 @@
                             </div>
 
                             <div class="grid gap-2">
-                                @forelse ($filteredComparisonRows as $row)
+                                @forelse ($filteredComparisonRows->take($comparisonLimit) as $row)
                                     @php
                                         $sample = $row['to_item'] ?? $row['from_item'];
                                         $statusColor = match ($row['status']) {
-                                            'Selisih Memburuk', 'Baru Selisih' => 'danger',
-                                            'Selisih Membaik', 'Sudah Normal' => 'success',
+                                            'Berubah' => 'warning',
+                                            'Tidak Berubah' => 'gray',
+                                            'Sudah Normal' => 'success',
                                             default => 'gray',
                                         };
                                     @endphp
@@ -594,16 +662,16 @@
                                             <div class="grid gap-1.5 border-t border-gray-100 pt-2.5 text-[11px] dark:border-white/10">
                                                 <div class="flex items-center justify-between gap-4">
                                                     <div class="text-gray-500">Terakhir</div>
-                                                    <div class="text-right font-mono font-semibold text-gray-900 dark:text-white">{{ app(\App\Services\ReportService::class)->formatBaseQty($row['from_selisih'], $sample) }}</div>
+                                                    <div class="text-right font-mono font-semibold text-gray-900 dark:text-white">{{ app(\App\Services\ReportService::class)->formatSignedBaseQty($row['from_selisih'], $sample) }}</div>
                                                 </div>
                                                 <div class="flex items-center justify-between gap-4">
                                                     <div class="text-gray-500">Sekarang</div>
-                                                    <div class="text-right font-mono font-semibold text-gray-900 dark:text-white">{{ app(\App\Services\ReportService::class)->formatBaseQty($row['to_selisih'], $sample) }}</div>
+                                                    <div class="text-right font-mono font-semibold text-gray-900 dark:text-white">{{ app(\App\Services\ReportService::class)->formatSignedBaseQty($row['to_selisih'], $sample) }}</div>
                                                 </div>
                                                 <div class="flex items-center justify-between gap-4">
                                                     <div class="text-gray-500">Perubahan</div>
                                                     <div class="text-right font-mono font-bold {{ $row['change'] === 0 ? 'text-gray-500' : ($row['change'] < 0 ? 'text-danger-600 dark:text-danger-400' : 'text-warning-600 dark:text-warning-400') }}">
-                                                        {{ app(\App\Services\ReportService::class)->formatBaseQty($row['change'], $sample) }}
+                                                        {{ app(\App\Services\ReportService::class)->formatSignedBaseQty($row['change'], $sample) }}
                                                     </div>
                                                 </div>
                                             </div>
@@ -614,6 +682,11 @@
                                         Tidak ada item selisih/perubahan yang cocok.
                                     </div>
                                 @endforelse
+                                @if ($filteredComparisonRows->count() > $comparisonLimit)
+                                    <x-filament::button type="button" wire:click="loadMoreComparison" color="gray" size="lg" class="w-full">
+                                        Lihat {{ min(10, $filteredComparisonRows->count() - $comparisonLimit) }} item lainnya
+                                    </x-filament::button>
+                                @endif
                             </div>
                         @else
                             <div class="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700">
@@ -624,14 +697,14 @@
                 </x-filament::section>
             </div>
 
-            @if ($comparisonFoundItems->isNotEmpty())
+            @if ($session->found_items_count > 0)
                 <div x-data="{ open: false }">
                     <x-filament::section>
                         <x-slot name="heading">
                             <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
                                 <span class="flex items-center gap-2.5">
                                     Barang Temuan
-                                    <x-filament::badge color="warning" size="lg">{{ $comparisonFoundItems->count() }}</x-filament::badge>
+                                    <x-filament::badge color="warning" size="lg">{{ $session->found_items_count }}</x-filament::badge>
                                 </span>
                                 <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
                             </button>
@@ -654,7 +727,7 @@
                                     <div class="mt-3 grid gap-2 border-t border-gray-100 pt-2.5 text-xs dark:border-white/10">
                                         <div class="flex items-start justify-between gap-3">
                                             <span class="text-gray-500">Qty fisik</span>
-                                            <span class="break-words text-right font-mono font-bold text-gray-900 dark:text-white">{{ $item->qty_aktual_display }}</span>
+                                            <span class="break-words text-right font-mono font-bold text-warning-700 dark:text-warning-300">{{ app(\App\Services\ReportService::class)->formatFoundQty($item) }}</span>
                                         </div>
                                         <div class="flex items-start justify-between gap-3">
                                             <span class="text-gray-500">Petugas</span>
@@ -669,29 +742,28 @@
                                     </div>
                                 </div>
                             @endforeach
+                            @if ($session->found_items_count > $foundItemsLimit)
+                                <x-filament::button type="button" wire:click="loadMoreFoundItems" color="gray" size="lg" class="w-full">
+                                    Lihat {{ min(10, $session->found_items_count - $foundItemsLimit) }} item lainnya
+                                </x-filament::button>
+                            @endif
                         </div>
                     </x-filament::section>
                 </div>
             @endif
 
             @php
-                $checkedItems = $session->items
-                    ->reject(fn ($item) => $item->status === \App\Enums\StockSessionItemStatus::Pending)
-                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
-                    ->values();
-                $checkedSearch = trim($checkedSearch ?? '');
-                $filteredCheckedItems = $checkedSearch === ''
-                    ? $checkedItems
-                    : $checkedItems->filter(fn ($item) => str_contains(strtolower($item->kode_barang . ' ' . $item->nama_barang . ' ' . ($item->checkedBy?->name ?? '')), strtolower($checkedSearch)));
+                $checkedData = $this->getCheckedItemsData();
+                $filteredCheckedItems = $checkedData['items'];
             @endphp
-            @if ($checkedItems->isNotEmpty())
+            @if ($session->checked_items > 0)
                 <div x-data="{ open: false }">
                     <x-filament::section>
                         <x-slot name="heading">
                             <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
                                 <span class="flex items-center gap-2.5">
                                     Sudah Dicek
-                                    <x-filament::badge color="success" size="lg">{{ $checkedItems->count() }}</x-filament::badge>
+                                    <x-filament::badge color="success" size="lg">{{ $session->checked_items }}</x-filament::badge>
                                 </span>
                                 <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
                             </button>
@@ -707,7 +779,7 @@
                             </div>
 
                             <div class="grid gap-2">
-                            @forelse ($filteredCheckedItems->take(25) as $item)
+                            @forelse ($filteredCheckedItems as $item)
                                 <button
                                     type="button"
                                     wire:click="startEditItem({{ $item->id }})"
@@ -745,9 +817,9 @@
                             </div>
                         </div>
 
-                        @if ($filteredCheckedItems->count() > 25)
+                        @if ($checkedData['total'] > 25)
                             <div x-show="open" class="mt-3 text-center text-sm text-gray-400">
-                                + {{ $filteredCheckedItems->count() - 25 }} item lainnya
+                                + {{ $checkedData['total'] - 25 }} hasil lainnya, gunakan pencarian
                             </div>
                         @endif
                     </x-filament::section>
@@ -755,19 +827,17 @@
             @endif
 
             @php
-                $mismatchedItems = $session->items
-                    ->where('status', \App\Enums\StockSessionItemStatus::Mismatched)
-                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
-                    ->values();
+                $mismatchedData = $this->getMismatchedItemsData();
+                $mismatchedItems = $mismatchedData['items'];
             @endphp
-            @if ($mismatchedItems->isNotEmpty())
+            @if ($session->mismatched_items > 0)
                 <div x-data="{ open: {{ $mismatchedItems->count() <= 3 ? 'true' : 'false' }} }">
                     <x-filament::section>
                         <x-slot name="heading">
                             <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
                                 <span class="flex items-center gap-2.5">
                                     Item Selisih
-                                    <x-filament::badge color="danger" size="lg">{{ $mismatchedItems->count() }}</x-filament::badge>
+                                    <x-filament::badge color="danger" size="lg">{{ $session->mismatched_items }}</x-filament::badge>
                                 </span>
                                 <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
                             </button>
@@ -788,7 +858,7 @@
                                     <div class="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-white/10">
                                         <div>
                                             <div class="text-xs text-gray-500">Selisih</div>
-                                            <div class="font-mono text-lg font-bold text-danger-600 dark:text-danger-400">{{ $item->selisih }}</div>
+                                            <div class="font-mono text-lg font-bold text-danger-600 dark:text-danger-400">{{ app(\App\Services\ReportService::class)->formatSignedBaseQty($item->selisih, $item) }}</div>
                                         </div>
                                         <span class="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-2 text-sm font-semibold text-danger-700 dark:bg-danger-950/30 dark:text-danger-300">
                                             Koreksi
@@ -797,32 +867,31 @@
                                     </div>
                                 </button>
                             @endforeach
+                            @if ($mismatchedData['total'] > $mismatchedItemsLimit)
+                                <x-filament::button type="button" wire:click="loadMoreMismatchedItems" color="gray" size="lg" class="w-full">
+                                    Lihat {{ min(10, $mismatchedData['total'] - $mismatchedItemsLimit) }} item lainnya
+                                </x-filament::button>
+                            @endif
                         </div>
                     </x-filament::section>
                 </div>
             @endif
 
             @php
-                $pendingItems = $session->items
-                    ->where('status', \App\Enums\StockSessionItemStatus::Pending)
-                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
-                    ->values();
-                $pendingSearch = trim($pendingSearch ?? '');
-                $filteredPendingItems = $pendingSearch === ''
-                    ? $pendingItems
-                    : $pendingItems->filter(fn ($item) => str_contains(strtolower($item->kode_barang . ' ' . $item->nama_barang), strtolower($pendingSearch)));
+                $pendingData = $this->getPendingItemsData();
+                $filteredPendingItems = $pendingData['items'];
+                $pendingTotal = max(0, $session->total_items - $session->checked_items);
             @endphp
-            @if ($pendingItems->isNotEmpty())
-                <div x-data="{ open: false }">
+            @if ($pendingTotal > 0)
+                <div x-data="{ open: true }">
                     <x-filament::section>
                         <x-slot name="heading">
-                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                            <div class="flex w-full items-center text-left text-sm font-semibold">
                                 <span class="flex items-center gap-2.5">
                                     Belum Dicek
-                                    <x-filament::badge color="gray" size="lg">{{ $pendingItems->count() }}</x-filament::badge>
+                                    <x-filament::badge color="gray" size="lg">{{ $pendingTotal }}</x-filament::badge>
                                 </span>
-                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
-                            </button>
+                            </div>
                         </x-slot>
 
                         <div x-show="open">
@@ -835,7 +904,7 @@
                             </div>
 
                             <div class="grid gap-2">
-                                @forelse ($filteredPendingItems->take(25) as $item)
+                                @forelse ($filteredPendingItems as $item)
                                     <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900 sm:p-4">
                                         <button
                                             type="button"
@@ -881,9 +950,9 @@
                                 @endforelse
                             </div>
 
-                            @if ($filteredPendingItems->count() > 25)
+                            @if ($pendingData['total'] > 25)
                                 <div class="mt-3 text-center text-sm text-gray-400">
-                                    + {{ $filteredPendingItems->count() - 25 }} item lainnya
+                                    + {{ $pendingData['total'] - 25 }} hasil lainnya, gunakan pencarian
                                 </div>
                             @endif
                         </div>
@@ -924,13 +993,6 @@
                             </div>
                             <div class="font-mono text-sm font-semibold text-primary-600 dark:text-primary-400">
                                 {{ $scannedItem->kode_barang }}
-                            </div>
-                        </div>
-
-                        <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-white/5">
-                            <div class="text-xs font-semibold uppercase text-gray-500">Qty Sistem</div>
-                            <div class="mt-1 text-2xl font-black leading-tight text-gray-950 dark:text-white">
-                                {{ $this->formatSystemQty($scannedItem) }}
                             </div>
                         </div>
 

@@ -41,6 +41,24 @@ class ReportService
         return $baseQty < 0 ? '-' . $display : $display;
     }
 
+    public function formatSignedBaseQty(?int $baseQty, StockSessionItem $item): string
+    {
+        $display = $this->formatBaseQty($baseQty, $item);
+
+        return $baseQty !== null && $baseQty > 0 ? '+' . $display : $display;
+    }
+
+    public function formatFoundQty(StockFoundItem $item): string
+    {
+        $display = trim($item->qty_aktual_display);
+
+        if ($item->qty_aktual_base <= 0 || str_starts_with($display, '+')) {
+            return $display;
+        }
+
+        return '+' . $display;
+    }
+
     /**
      * Get detailed items list for a specific stock session.
      */
@@ -181,7 +199,7 @@ class ReportService
                     $item->nama_barang,
                     $item->qty_sistem_display,
                     $item->qty_aktual_display ?? '-',
-                    $this->formatBaseQty($item->selisih, $item),
+                    $this->formatSignedBaseQty($item->selisih, $item),
                     $item->status->value,
                     $item->checkedBy?->name ?? '-',
                     $session->session_date->format('Y-m-d'),
@@ -228,7 +246,7 @@ class ReportService
                     $item->nama_barang,
                     $item->qty_sistem_display,
                     $item->qty_aktual_display ?? '-',
-                    $this->formatBaseQty($item->selisih, $item),
+                    $this->formatSignedBaseQty($item->selisih, $item),
                     $item->checkedBy?->name ?? '-',
                     $item->checked_at?->format('Y-m-d H:i') ?? '-',
                 ]
@@ -247,8 +265,8 @@ class ReportService
                     $this->excelText($item->kode_barang),
                     $item->nama_barang,
                     '0',
-                    $item->qty_aktual_display,
-                    $item->qty_aktual_display,
+                    $this->formatFoundQty($item),
+                    $this->formatFoundQty($item),
                     $item->foundBy?->name ?? '-',
                     $item->found_at?->format('Y-m-d H:i') ?? '-',
                 ]
@@ -359,9 +377,9 @@ class ReportService
                     $row['principal'],
                     $this->excelText($row['kode_barang']),
                     $row['nama_barang'],
-                    $this->formatBaseQty($row['from_selisih'], $sample),
-                    $this->formatBaseQty($row['to_selisih'], $sample),
-                    $this->formatBaseQty($row['change'], $sample),
+                    $this->formatSignedBaseQty($row['from_selisih'], $sample),
+                    $this->formatSignedBaseQty($row['to_selisih'], $sample),
+                    $this->formatSignedBaseQty($row['change'], $sample),
                     $row['status'],
                 ]
             ));
@@ -413,7 +431,7 @@ class ReportService
                     $item->status->value,
                     $this->formatBaseQty($item->qty_sistem_base ?? 0, $item),
                     $this->formatBaseQty($item->qty_aktual_base, $item),
-                    $this->formatBaseQty($item->selisih, $item),
+                    $this->formatSignedBaseQty($item->selisih, $item),
                     $item->checkedBy?->name ?? '-',
                     $session?->started_at?->format('H:i') ?? '-',
                     $item->checked_at?->format('H:i') ?? '-',
@@ -435,23 +453,11 @@ class ReportService
 
     protected function comparisonStatus(int $fromSelisih, int $toSelisih): string
     {
-        if ($fromSelisih === 0 && $toSelisih !== 0) {
-            return 'Baru Selisih';
-        }
-
         if ($fromSelisih !== 0 && $toSelisih === 0) {
             return 'Sudah Normal';
         }
 
-        if (abs($toSelisih) > abs($fromSelisih)) {
-            return 'Selisih Memburuk';
-        }
-
-        if (abs($toSelisih) < abs($fromSelisih)) {
-            return 'Selisih Membaik';
-        }
-
-        return 'Tidak Berubah';
+        return $fromSelisih === $toSelisih ? 'Tidak Berubah' : 'Berubah';
     }
 
     protected function labelsFromSatuan(?string $satuan): array

@@ -267,7 +267,7 @@ class Reports extends Page implements HasTable
 
                 TextColumn::make('selisih')
                     ->label('Selisih')
-                    ->formatStateUsing(fn ($state, StockSessionItem $record) => app(ReportService::class)->formatBaseQty($state, $record))
+                    ->formatStateUsing(fn ($state, StockSessionItem $record) => app(ReportService::class)->formatSignedBaseQty($state, $record))
                     ->color(fn ($state) => $state < 0 ? 'danger' : 'warning'),
 
                 TextColumn::make('checkedBy.name')

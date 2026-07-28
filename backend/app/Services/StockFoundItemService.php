@@ -10,6 +10,18 @@ use RuntimeException;
 
 class StockFoundItemService
 {
+    public function findItemMaster(StockSession $session, string $code): ?ItemMaster
+    {
+        $code = trim($code);
+
+        return ItemMaster::query()
+            ->where('branch_id', $session->branch_id)
+            ->where(fn ($query) => $query
+                ->where('kode_barang', $code)
+                ->orWhere('barcode', $code))
+            ->first();
+    }
+
     public function findExisting(StockSession $session, string $code): ?StockFoundItem
     {
         $code = trim($code);
@@ -29,16 +41,13 @@ class StockFoundItemService
             throw new RuntimeException("Barcode/kode {$code} sudah tercatat sebagai barang temuan di sesi ini.");
         }
 
-        $itemMaster = ItemMaster::query()
-            ->where('branch_id', $session->branch_id)
-            ->where(fn ($query) => $query
-                ->where('kode_barang', $code)
-                ->orWhere('barcode', $code))
-            ->first();
+        $itemMaster = $this->findItemMaster($session, $code);
 
         $satuan = $itemMaster?->satuan ?: ($data['satuan'] ?? 'PCS');
         $qtyDisplay = trim((string) ($data['qty_aktual_display'] ?? ''));
-        $qtyBase = $this->baseFallbackFromDisplay($qtyDisplay);
+        $qtyBase = array_key_exists('qty_aktual_base', $data) && $data['qty_aktual_base'] !== null
+            ? max(0, (int) $data['qty_aktual_base'])
+            : $this->baseFallbackFromDisplay($qtyDisplay);
 
         if ($qtyDisplay === '') {
             $label = collect(explode('-', (string) $satuan))->map(fn ($value) => trim($value))->filter()->last() ?: 'PCS';
