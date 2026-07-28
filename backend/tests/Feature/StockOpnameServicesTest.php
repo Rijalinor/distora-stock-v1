@@ -325,6 +325,13 @@ class StockOpnameServicesTest extends TestCase
         ]);
 
         $file = UploadedFile::fake()->createWithContent('backup-item-master.csv', $csv);
+        $preview = app(ItemMasterBackupService::class)->previewCsv($file);
+
+        $this->assertEquals(1, $preview['created']);
+        $this->assertEquals(0, $preview['updated']);
+        $this->assertEquals('ITEM002', $preview['examples'][0]['code']);
+        $this->assertDatabaseMissing('item_masters', ['kode_barang' => 'ITEM002']);
+
         $stats = app(ItemMasterBackupService::class)->restoreCsv($file);
 
         $this->assertEquals(['created' => 1, 'updated' => 0, 'skipped' => 0], $stats);
@@ -341,6 +348,10 @@ class StockOpnameServicesTest extends TestCase
 
         $this->assertEquals(['CTN', 'PCS'], $item->getQtyLabelsArray());
         $this->assertEquals([24], $item->getQtyFactorsArray());
+
+        $previewAfterRestore = app(ItemMasterBackupService::class)->previewCsv($file);
+        $this->assertEquals(0, $previewAfterRestore['created']);
+        $this->assertEquals(1, $previewAfterRestore['updated']);
     }
 
     /** @test */

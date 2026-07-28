@@ -11,11 +11,13 @@ use App\Services\ItemMasterTransferService;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ListItemMasters extends ListRecords
@@ -37,7 +39,9 @@ class ListItemMasters extends ListRecords
                 ->color('warning')
                 ->visible(fn () => auth()->user()?->isCentralAdmin() ?? false)
                 ->requiresConfirmation()
-                ->modalDescription('Upload file CSV backup Item Master. Data dengan kode barang yang sama akan diperbarui.')
+                ->modalHeading('Pratinjau Restore Item Master')
+                ->modalDescription('Pilih file backup. Periksa dampaknya sebelum menjalankan restore.')
+                ->modalSubmitActionLabel('Konfirmasi Restore')
                 ->form([
                     FileUpload::make('backup_file')
                         ->label('File Backup CSV')
@@ -45,7 +49,27 @@ class ListItemMasters extends ListRecords
                         ->disk('local')
                         ->directory('item-master-backups')
                         ->visibility('private')
+                        ->live()
                         ->required(),
+                    Placeholder::make('restore_preview')
+                        ->label('Pratinjau')
+                        ->content(function (Get $get) {
+                            if (blank($get('backup_file'))) {
+                                return 'Pilih file untuk melihat pratinjau.';
+                            }
+
+                            try {
+                                return view('filament.item-master-restore-preview', [
+                                    'preview' => app(ItemMasterBackupService::class)->previewCsv($get('backup_file')),
+                                    'error' => null,
+                                ]);
+                            } catch (ValidationException $exception) {
+                                return view('filament.item-master-restore-preview', [
+                                    'preview' => null,
+                                    'error' => collect($exception->errors())->flatten()->first(),
+                                ]);
+                            }
+                        }),
                 ])
                 ->action(function (array $data): void {
                     $stats = app(ItemMasterBackupService::class)->restoreCsv($data['backup_file']);

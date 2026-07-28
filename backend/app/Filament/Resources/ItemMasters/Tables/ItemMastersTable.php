@@ -8,6 +8,7 @@ use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -57,6 +58,17 @@ class ItemMastersTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                SelectFilter::make('principal_id')
+                    ->label('Principal')
+                    ->relationship('principal', 'nama')
+                    ->searchable()
+                    ->preload(),
+                Filter::make('missing_barcode')
+                    ->label('Belum Ada Barcode')
+                    ->query(fn (Builder $query): Builder => $query
+                        ->where(fn (Builder $query): Builder => $query
+                            ->whereNull('barcode')
+                            ->orWhere('barcode', ''))),
                 Filter::make('duplicate_barcode')
                     ->label('Barcode Duplikat')
                     ->query(fn (Builder $query): Builder => $query

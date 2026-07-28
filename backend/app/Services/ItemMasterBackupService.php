@@ -59,6 +59,68 @@ class ItemMasterBackupService
     }
 
     /**
+     * @return array{created: int, updated: int, skipped: int, examples: array<int, array<string, string>>}
+     */
+    public function previewCsv(string|UploadedFile $file): array
+    {
+        $path = $file instanceof UploadedFile
+            ? $file->getRealPath()
+            : Storage::disk('local')->path($file);
+
+        $handle = fopen($path, 'rb');
+
+        if (! $handle) {
+            throw ValidationException::withMessages(['backup_file' => 'File backup tidak bisa dibaca.']);
+        }
+
+        $headers = array_map('trim', fgetcsv($handle) ?: []);
+        $required = ['principal_kode', 'principal_nama', 'kode_barang', 'barcode', 'nama_barang', 'satuan'];
+        $missing = array_diff($required, $headers);
+
+        if ($missing) {
+            fclose($handle);
+
+            throw ValidationException::withMessages([
+                'backup_file' => 'Format backup tidak sesuai. Kolom hilang: ' . implode(', ', $missing),
+            ]);
+        }
+
+        $branchIds = Branch::query()->pluck('id', 'kode');
+        $existingItems = ItemMaster::query()
+            ->get(['branch_id', 'kode_barang'])
+            ->mapWithKeys(fn (ItemMaster $item) => ["{$item->branch_id}|{$item->kode_barang}" => true]);
+        $preview = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'examples' => []];
+
+        while (($values = fgetcsv($handle)) !== false) {
+            $row = array_combine($headers, array_slice(array_pad($values, count($headers), ''), 0, count($headers)));
+            $row = array_map(fn ($value) => $this->restoreCellValue((string) $value), $row ?: []);
+
+            if (! $row || blank($row['kode_barang'] ?? null) || blank($row['principal_kode'] ?? null)) {
+                $preview['skipped']++;
+                continue;
+            }
+
+            $branchCode = trim((string) ($row['branch_kode'] ?? '')) ?: 'PUSAT';
+            $branchId = $branchIds->get($branchCode);
+            $code = trim($row['kode_barang']);
+            $action = $branchId && $existingItems->has("{$branchId}|{$code}") ? 'updated' : 'created';
+            $preview[$action]++;
+
+            if (count($preview['examples']) < 5) {
+                $preview['examples'][] = [
+                    'action' => $action === 'created' ? 'Baru' : 'Diperbarui',
+                    'branch' => $branchCode,
+                    'code' => $code,
+                    'name' => trim($row['nama_barang'] ?: $code),
+                ];
+            }
+        }
+
+        fclose($handle);
+
+        return $preview;
+    }
+    /**
      * @return array{created: int, updated: int, skipped: int}
      */
     public function restoreCsv(string|UploadedFile $file): array
