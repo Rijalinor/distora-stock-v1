@@ -6,8 +6,11 @@ use App\Filament\Resources\StockSessions\StockSessionResource;
 use App\Filament\Resources\CsvUploads\CsvUploadResource;
 use App\Services\StockSessionService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\Utilities\Get;
 
 class ListStockSessions extends ListRecords
 {
@@ -26,7 +29,7 @@ class ListStockSessions extends ListRecords
                 ->modalSubmitAction(false)
                 ->modalCancelActionLabel('Tutup')
                 ->modalContent(fn () => view('filament.pages.stock-sessions-close-day', [
-                    'summary' => app(StockSessionService::class)->summarizeTodaySessions(),
+                    'summary' => app(StockSessionService::class)->summarizeTodaySessions($this->managedBranchId()),
                 ]))
                 ->visible(fn (): bool => auth()->user()?->isAdmin() ?? false),
 
@@ -37,21 +40,38 @@ class ListStockSessions extends ListRecords
                 ->url(CsvUploadResource::getUrl('create'))
                 ->visible(fn (): bool => auth()->user()?->isAdmin() ?? false),
 
-            Action::make('closeTodaySessions')
-                ->label('Tutup Semua Sesi Hari Ini')
+            Action::make('closeSessions')
+                ->label('Tutup Sesi')
                 ->icon('heroicon-o-lock-closed')
                 ->color('danger')
-                ->modalHeading('Tutup semua sesi hari ini?')
-                ->modalDescription('Lihat dulu principal yang belum selesai. Setelah ditutup, sesi aktif hari ini tidak bisa dipakai lagi.')
-                ->modalContent(fn () => view('filament.pages.stock-sessions-close-day', [
-                    'summary' => app(StockSessionService::class)->summarizeTodaySessions(),
-                ]))
+                ->modalHeading('Tutup sesi stock opname')
+                ->modalDescription('Pilih tanggal dan periksa sesi aktif sebelum menutupnya.')
+                ->modalSubmitActionLabel('Tutup Sesi')
+                ->form([
+                    DatePicker::make('session_date')
+                        ->label('Tanggal sesi')
+                        ->default(today())
+                        ->maxDate(today())
+                        ->live()
+                        ->required(),
+                    Placeholder::make('session_summary')
+                        ->label('Ringkasan')
+                        ->content(fn (Get $get) => view('filament.pages.stock-sessions-close-day', [
+                            'summary' => app(StockSessionService::class)->summarizeSessions(
+                                $get('session_date') ?: today()->toDateString(),
+                                $this->managedBranchId(),
+                            ),
+                        ])),
+                ])
                 ->requiresConfirmation()
-                ->action(function (): void {
-                    $closed = app(StockSessionService::class)->closeTodaySessions();
+                ->action(function (array $data): void {
+                    $closed = app(StockSessionService::class)->closeSessions(
+                        $data['session_date'],
+                        $this->managedBranchId(),
+                    );
 
                     Notification::make()
-                        ->title('Sesi hari ini ditutup')
+                        ->title('Sesi ditutup')
                         ->body("{$closed} sesi berhasil ditutup.")
                         ->success()
                         ->send();
@@ -60,5 +80,12 @@ class ListStockSessions extends ListRecords
                 })
                 ->visible(fn (): bool => auth()->user()?->isAdmin() ?? false),
         ];
+    }
+
+    private function managedBranchId(): ?int
+    {
+        $user = auth()->user();
+
+        return $user?->isCentralAdmin() ? null : $user?->branch_id;
     }
 }

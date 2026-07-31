@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 class ItemMasterBackupService
 {
-    public function buildCsv(): string
+    public function buildCsv(?int $branchId = null): string
     {
         $lines = [];
         $lines[] = $this->row([
@@ -33,6 +33,7 @@ class ItemMasterBackupService
 
         ItemMaster::query()
             ->with(['branch', 'principal'])
+            ->when($branchId, fn ($query) => $query->where('branch_id', $branchId))
             ->orderBy('branch_id')
             ->orderBy('kode_barang')
             ->chunk(500, function ($items) use (&$lines): void {
@@ -61,7 +62,7 @@ class ItemMasterBackupService
     /**
      * @return array{created: int, updated: int, skipped: int, examples: array<int, array<string, string>>}
      */
-    public function previewCsv(string|UploadedFile $file): array
+    public function previewCsv(string|UploadedFile $file, ?int $branchId = null): array
     {
         $path = $file instanceof UploadedFile
             ? $file->getRealPath()
@@ -85,6 +86,7 @@ class ItemMasterBackupService
             ]);
         }
 
+        $forcedBranch = $branchId ? Branch::findOrFail($branchId) : null;
         $branchIds = Branch::query()->pluck('id', 'kode');
         $existingItems = ItemMaster::query()
             ->get(['branch_id', 'kode_barang'])
@@ -100,10 +102,10 @@ class ItemMasterBackupService
                 continue;
             }
 
-            $branchCode = trim((string) ($row['branch_kode'] ?? '')) ?: 'PUSAT';
-            $branchId = $branchIds->get($branchCode);
+            $branchCode = $forcedBranch?->kode ?? (trim((string) ($row['branch_kode'] ?? '')) ?: 'PUSAT');
+            $targetBranchId = $forcedBranch?->id ?? $branchIds->get($branchCode);
             $code = trim($row['kode_barang']);
-            $action = $branchId && $existingItems->has("{$branchId}|{$code}") ? 'updated' : 'created';
+            $action = $targetBranchId && $existingItems->has("{$targetBranchId}|{$code}") ? 'updated' : 'created';
             $preview[$action]++;
 
             if (count($preview['examples']) < 5) {
@@ -123,7 +125,7 @@ class ItemMasterBackupService
     /**
      * @return array{created: int, updated: int, skipped: int}
      */
-    public function restoreCsv(string|UploadedFile $file): array
+    public function restoreCsv(string|UploadedFile $file, ?int $branchId = null): array
     {
         $path = $file instanceof UploadedFile
             ? $file->getRealPath()
@@ -149,7 +151,7 @@ class ItemMasterBackupService
 
         $stats = ['created' => 0, 'updated' => 0, 'skipped' => 0];
 
-        DB::transaction(function () use ($handle, $headers, &$stats): void {
+        DB::transaction(function () use ($handle, $headers, $branchId, &$stats): void {
             while (($values = fgetcsv($handle)) !== false) {
                 $row = array_combine($headers, array_slice(array_pad($values, count($headers), ''), 0, count($headers)));
 
@@ -160,7 +162,7 @@ class ItemMasterBackupService
                     continue;
                 }
 
-                $branch = $this->resolveBranch($row);
+                $branch = $this->resolveBranch($row, $branchId);
 
                 $principal = Principal::firstOrCreate(
                     ['kode' => trim($row['principal_kode'])],
@@ -253,8 +255,12 @@ class ItemMasterBackupService
         );
     }
 
-    protected function resolveBranch(array $row): Branch
+    protected function resolveBranch(array $row, ?int $branchId = null): Branch
     {
+        if ($branchId) {
+            return Branch::findOrFail($branchId);
+        }
+
         $branchKode = trim((string) ($row['branch_kode'] ?? ''));
 
         if ($branchKode !== '') {

@@ -167,13 +167,17 @@ class StockSessionService
      *     pending_principals: \Illuminate\Support\Collection<int, array<string, mixed>>
      * }
      */
-    public function summarizeTodaySessions(): array
+    public function summarizeTodaySessions(?int $branchId = null): array
     {
-        $date = today()->toDateString();
+        return $this->summarizeSessions(today()->toDateString(), $branchId);
+    }
 
+    public function summarizeSessions(string $date, ?int $branchId = null): array
+    {
         $sessions = StockSession::query()
             ->with('principal')
             ->whereDate('session_date', $date)
+            ->when($branchId, fn ($query) => $query->where('branch_id', $branchId))
             ->get();
 
         $pendingPrincipals = $sessions
@@ -201,12 +205,13 @@ class StockSessionService
      *
      * @return int
      */
-    public function closeTodaySessions(): int
+    public function closeSessions(string $date, ?int $branchId = null): int
     {
-        return DB::transaction(function (): int {
+        return DB::transaction(function () use ($date, $branchId): int {
             $sessions = StockSession::query()
-                ->whereDate('session_date', today())
+                ->whereDate('session_date', $date)
                 ->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress])
+                ->when($branchId, fn ($query) => $query->where('branch_id', $branchId))
                 ->get();
 
             foreach ($sessions as $session) {
@@ -223,7 +228,7 @@ class StockSessionService
                 app(AuditLogService::class)->log('session_closed_by_day', $session, $before, [
                     'status' => $session->status?->value,
                     'completed_at' => $session->completed_at?->toDateTimeString(),
-                    'closed_date' => today()->toDateString(),
+                    'closed_date' => $date,
                 ]);
             }
 

@@ -13,9 +13,7 @@ echo Menutup Laravel...
 taskkill /FI "WINDOWTITLE eq Distora Laravel*" /T /F >nul 2>nul
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr /R /C:":%APP_PORT% .*LISTENING"') do taskkill /PID %%p /F >nul 2>nul
 
-echo Menutup ngrok/cloudflared jika berjalan...
-taskkill /IM ngrok.exe /F >nul 2>nul
-taskkill /IM cloudflared.exe /F >nul 2>nul
+echo Menutup ngrok/cloudflared yang dibuka script jika berjalan...
 taskkill /FI "WINDOWTITLE eq Distora ngrok*" /T /F >nul 2>nul
 taskkill /FI "WINDOWTITLE eq Distora Cloudflare Tunnel*" /T /F >nul 2>nul
 

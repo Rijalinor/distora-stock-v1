@@ -13,7 +13,7 @@
 
     <div>
         <div class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-            Principal yang belum selesai hari ini
+            Principal yang belum selesai pada tanggal ini
         </div>
 
         <div class="space-y-2">
@@ -34,7 +34,7 @@
                 </div>
             @empty
                 <div class="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950/30 dark:text-green-300">
-                    Tidak ada sesi aktif hari ini.
+                    Tidak ada sesi aktif pada tanggal ini.
                 </div>
             @endforelse
         </div>

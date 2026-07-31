@@ -132,6 +132,16 @@ class Reports extends Page implements HasTable
 
         return [
             $filterAction,
+            Action::make('printSelisih')
+                ->label('Print Selisih')
+                ->icon('heroicon-m-printer')
+                ->color('gray')
+                ->action(fn () => $this->js("document.body.dataset.printReport = 'selisih'; window.print()")),
+            Action::make('printComparison')
+                ->label('Print Perbandingan')
+                ->icon('heroicon-m-printer')
+                ->color('gray')
+                ->action(fn () => $this->js("document.body.dataset.printReport = 'comparison'; window.print()")),
             ActionGroup::make([
                 Action::make('exportDaily')
                     ->label('Download Laporan Harian')

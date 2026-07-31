@@ -31,13 +31,13 @@ class ListItemMasters extends ListRecords
                 ->label('Backup Item Master')
                 ->icon('heroicon-m-arrow-down-tray')
                 ->color('gray')
-                ->visible(fn () => auth()->user()?->isCentralAdmin() ?? false)
+                ->visible(fn () => auth()->user()?->isAdmin() ?? false)
                 ->action('downloadBackup'),
             Action::make('restoreItemMaster')
                 ->label('Restore Item Master')
                 ->icon('heroicon-m-arrow-up-tray')
                 ->color('warning')
-                ->visible(fn () => auth()->user()?->isCentralAdmin() ?? false)
+                ->visible(fn () => auth()->user()?->isAdmin() ?? false)
                 ->requiresConfirmation()
                 ->modalHeading('Pratinjau Restore Item Master')
                 ->modalDescription('Pilih file backup. Periksa dampaknya sebelum menjalankan restore.')
@@ -60,7 +60,10 @@ class ListItemMasters extends ListRecords
 
                             try {
                                 return view('filament.item-master-restore-preview', [
-                                    'preview' => app(ItemMasterBackupService::class)->previewCsv($get('backup_file')),
+                                    'preview' => app(ItemMasterBackupService::class)->previewCsv(
+                                        $get('backup_file'),
+                                        auth()->user()?->isCentralAdmin() ? null : auth()->user()?->branch_id,
+                                    ),
                                     'error' => null,
                                 ]);
                             } catch (ValidationException $exception) {
@@ -72,7 +75,10 @@ class ListItemMasters extends ListRecords
                         }),
                 ])
                 ->action(function (array $data): void {
-                    $stats = app(ItemMasterBackupService::class)->restoreCsv($data['backup_file']);
+                    $stats = app(ItemMasterBackupService::class)->restoreCsv(
+                        $data['backup_file'],
+                        auth()->user()?->isCentralAdmin() ? null : auth()->user()?->branch_id,
+                    );
 
                     Notification::make()
                         ->title('Restore Item Master selesai')
@@ -141,7 +147,10 @@ class ListItemMasters extends ListRecords
 
     public function downloadBackup(): StreamedResponse
     {
-        $csv = app(ItemMasterBackupService::class)->buildCsv();
+        $user = auth()->user();
+        $csv = app(ItemMasterBackupService::class)->buildCsv(
+            $user?->isCentralAdmin() ? null : $user?->branch_id,
+        );
         $filename = 'backup-item-master-' . now()->format('Y-m-d-His') . '.csv';
 
         return response()->streamDownload(

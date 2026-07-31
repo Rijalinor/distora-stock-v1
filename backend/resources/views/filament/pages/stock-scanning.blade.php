@@ -108,6 +108,12 @@
                                 <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-500 sm:text-base">
                                     <span>{{ $availableSession->branch?->nama ?? 'Tanpa Cabang' }}</span>
                                     <span>{{ $availableSession->checked_items }}/{{ $availableSession->total_items }} item</span>
+                                    <span>{{ $availableSession->session_date->format('d M Y') }}</span>
+                                    @if ($availableSession->session_date->isToday())
+                                        <x-filament::badge color='success'>Hari ini</x-filament::badge>
+                                    @else
+                                        <x-filament::badge color='warning'>Lanjutan</x-filament::badge>
+                                    @endif
                                     @if ($availableSession->mismatched_items > 0)
                                         <span class="text-danger-600">{{ $availableSession->mismatched_items }} selisih</span>
                                     @endif
@@ -134,7 +140,7 @@
                     : 0;
             @endphp
 
-            @if (! $scannedItem && ! $scanCandidates && ! $notFoundBarcode)
+            @if (! $scannedItem && ! $scanCandidates && $notFoundBarcode === null)
             <x-filament::section>
                 <x-slot name="heading">
                     <span class="text-2xl sm:text-3xl">Scan Barcode</span>
@@ -166,7 +172,7 @@
 
                             try {
                                 this.detector = new BarcodeDetector({
-                                    formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'code_39', 'code_93', 'itf', 'upc_a', 'upc_e'],
+                                    formats: ['code_128', 'ean_13', 'ean_8', 'code_39', 'code_93', 'itf', 'upc_a', 'upc_e'],
                                 });
                                 this.stream = await navigator.mediaDevices.getUserMedia({
                                     video: {
@@ -308,6 +314,17 @@
                             <span wire:loading wire:target="scanBarcode">Mencari...</span>
                         </x-filament::button>
                     </form>
+
+                    <x-filament::button
+                        type="button"
+                        size="md"
+                        color="gray"
+                        icon="heroicon-m-plus-circle"
+                        class="w-full"
+                        wire:click="startManualFoundItem"
+                    >
+                        Barang Temuan
+                    </x-filament::button>
                 </div>
             </x-filament::section>
             @endif
@@ -376,7 +393,7 @@
             </div>
             @endif
 
-            @if (! $scannedItem && $notFoundBarcode)
+            @if (! $scannedItem && $notFoundBarcode !== null)
             <div
                 x-ref="foundItemPanel"
                 x-bind:class="{ 'distora-candidate-flash': foundItemFlash }"
@@ -394,7 +411,7 @@
                         >
                             Kembali
                         </x-filament::button>
-                        <x-filament::badge color="warning">Barang Temuan</x-filament::badge>
+                        <x-filament::badge color="warning">{{ $editingFoundItemId ? 'Edit Barang Temuan' : 'Barang Temuan' }}</x-filament::badge>
                     </div>
 
                     @if ($foundItemMasterId)
@@ -410,10 +427,20 @@
                         </div>
                     @else
                         <div class="space-y-2">
-                            <div class="font-mono text-sm font-semibold text-warning-600 dark:text-warning-400">
-                                {{ $notFoundBarcode }}
-                            </div>
                             <div class="text-xs text-gray-500">Tidak terdaftar di sesi aktif</div>
+
+                            <div>
+                                <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                    Kode / Barcode
+                                </label>
+                                <x-filament::input.wrapper>
+                                    <x-filament::input
+                                    type="text"
+                                    wire:model="notFoundBarcode"
+                                    placeholder="Ketik kode atau barcode"
+                                />
+                                </x-filament::input.wrapper>
+                            </div>
 
                             <div>
                                 <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -480,11 +507,11 @@
                         type="button"
                         color="warning"
                         size="xl"
-                        icon="heroicon-m-plus-circle"
+                        :icon="$editingFoundItemId ? 'heroicon-m-check' : 'heroicon-m-plus-circle'"
                         class="w-full"
                         wire:click="recordFoundItem"
                     >
-                        Simpan Barang Temuan
+                        {{ $editingFoundItemId ? 'Simpan Perubahan' : 'Simpan Barang Temuan' }}
                     </x-filament::button>
                 </div>
             </x-filament::section>
@@ -739,6 +766,14 @@
                                                 {{ $item->note }}
                                             </div>
                                         @endif
+                                    </div>
+                                    <div class="mt-3 flex justify-end gap-2">
+                                        <x-filament::button type="button" size="sm" color="gray" icon="heroicon-m-pencil-square" wire:click="editFoundItem({{ $item->id }})">
+                                            Edit
+                                        </x-filament::button>
+                                        <x-filament::button type="button" size="sm" color="danger" icon="heroicon-m-trash" wire:click="deleteFoundItem({{ $item->id }})" wire:confirm="Hapus barang temuan ini?">
+                                            Hapus
+                                        </x-filament::button>
                                     </div>
                                 </div>
                             @endforeach
@@ -999,7 +1034,9 @@
                         @if ($isEditing)
                             <x-filament::callout color="info" icon="heroicon-m-pencil-square">
                                 <x-slot name="heading">Mode Edit</x-slot>
-                                <x-slot name="description">Koreksi qty aktual untuk item ini.</x-slot>
+                                <x-slot name="description">
+                                    Stok Sistem: {{ $this->formatSystemQty($scannedItem) }}
+                                </x-slot>
                             </x-filament::callout>
                         @endif
 
@@ -1040,25 +1077,15 @@
 
                         <div class="space-y-3 pt-2">
                             @if (! $isEditing)
-                                <div class="grid grid-cols-2 gap-3 distora-scan-actions">
+                                <div class="distora-scan-actions">
                                     <x-filament::button
                                         wire:click="submitActualQty"
-                                        color="warning"
-                                        size="xl"
-                                        icon="heroicon-m-exclamation-triangle"
-                                        class="w-full"
-                                    >
-                                        Selisih
-                                    </x-filament::button>
-
-                                    <x-filament::button
-                                        wire:click="markComplete"
-                                        color="success"
+                                        color="primary"
                                         size="xl"
                                         icon="heroicon-m-check"
                                         class="w-full"
                                     >
-                                        Lengkap
+                                        Simpan Hasil
                                     </x-filament::button>
                                 </div>
 

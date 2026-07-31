@@ -89,6 +89,8 @@ class StockScanning extends Page
 
     public string $foundNote = '';
 
+    public ?int $editingFoundItemId = null;
+
     /** @var array<int, array{name: string, code: string, status: string, at: string}> */
     public array $recentScans = [];
 
@@ -113,7 +115,6 @@ class StockScanning extends Page
     {
         $query = StockSession::query()
             ->with(['principal', 'branch', 'officers'])
-            ->whereDate('session_date', today())
             ->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress]);
 
         $user = Auth::user();
@@ -122,7 +123,10 @@ class StockScanning extends Page
             $query->where('branch_id', $user->branch_id);
         }
 
-        return $query->orderBy('principal_id')->get();
+        return $query
+            ->orderBy('session_date')
+            ->orderBy('principal_id')
+            ->get();
     }
 
     public function selectSession(int $sessionId): void
@@ -453,16 +457,28 @@ class StockScanning extends Page
         }
     }
 
-    public function recordFoundItem(): void
+    public function startManualFoundItem(): void
     {
-        if (! $this->ensureSelectedSessionAccess() || ! $this->notFoundBarcode) {
+        if (! $this->ensureSelectedSessionAccess()) {
             return;
         }
 
-        if (blank($this->foundItemName) || (! $this->foundItemMasterId && blank($this->foundQty))) {
+        $this->resetScanState(false);
+        $this->notFoundBarcode = '';
+        $this->foundQty = '1 PCS';
+        $this->dispatch('stock-found-item-ready');
+    }
+
+    public function recordFoundItem(): void
+    {
+        if (! $this->ensureSelectedSessionAccess() || $this->notFoundBarcode === null) {
+            return;
+        }
+
+        if (blank($this->notFoundBarcode) || blank($this->foundItemName) || (! $this->foundItemMasterId && blank($this->foundQty))) {
             Notification::make()
                 ->title('Data belum lengkap')
-                ->body('Nama barang dan qty fisik wajib diisi.')
+                ->body('Kode/barcode, nama barang, dan qty fisik wajib diisi.')
                 ->warning()
                 ->send();
 
@@ -480,14 +496,21 @@ class StockScanning extends Page
         }
 
         try {
-            app(StockFoundItemService::class)->recordFoundItem($session, [
-                'kode_barang' => $this->notFoundBarcode,
+            $data = [
+                'kode_barang' => trim($this->notFoundBarcode),
                 'nama_barang' => $this->foundItemName ?: $this->notFoundBarcode,
                 'qty_aktual_display' => $qtyDisplay,
                 'qty_aktual_base' => $qtyBase,
                 'suspected_item_master_id' => $this->suspectedItemMasterId,
                 'note' => $this->foundNote,
-            ], Auth::user());
+            ];
+
+            if ($this->editingFoundItemId) {
+                $foundItem = $session->foundItems()->findOrFail($this->editingFoundItemId);
+                app(StockFoundItemService::class)->updateFoundItem($foundItem, $data);
+            } else {
+                app(StockFoundItemService::class)->recordFoundItem($session, $data, Auth::user());
+            }
         } catch (\RuntimeException $e) {
             Notification::make()
                 ->title('Barang temuan sudah tercatat')
@@ -508,6 +531,40 @@ class StockScanning extends Page
             ->send();
 
         $this->resetScanState(false);
+    }
+
+    public function editFoundItem(int $id): void
+    {
+        if (! $this->ensureSelectedSessionAccess()) {
+            return;
+        }
+
+        $item = StockFoundItem::query()
+            ->where('stock_session_id', $this->selectedSessionId)
+            ->findOrFail($id);
+
+        $this->resetScanState(false);
+        $this->editingFoundItemId = $item->id;
+        $this->notFoundBarcode = $item->kode_barang;
+        $this->foundItemName = $item->nama_barang;
+        $this->foundQty = $item->qty_aktual_display;
+        $this->foundNote = $item->note ?? '';
+        $this->dispatch('stock-found-item-ready');
+    }
+
+    public function deleteFoundItem(int $id): void
+    {
+        if (! $this->ensureSelectedSessionAccess()) {
+            return;
+        }
+
+        $item = StockFoundItem::query()
+            ->where('stock_session_id', $this->selectedSessionId)
+            ->findOrFail($id);
+
+        app(StockFoundItemService::class)->deleteFoundItem($item);
+
+        Notification::make()->title('Barang temuan dihapus')->success()->send();
     }
 
     public function getSelectedSession(): ?StockSession
@@ -712,7 +769,6 @@ class StockScanning extends Page
 
         $session = StockSession::query()
             ->whereKey($this->selectedSessionId)
-            ->whereDate('session_date', today())
             ->whereIn('status', [StockSessionStatus::Open, StockSessionStatus::InProgress])
             ->first();
 
@@ -788,6 +844,7 @@ class StockScanning extends Page
         $this->foundQty = '';
         $this->suspectedItemMasterId = null;
         $this->foundNote = '';
+        $this->editingFoundItemId = null;
         $this->dispatch('stock-scan-ready');
     }
 }

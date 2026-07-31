@@ -67,6 +67,7 @@ class ItemMasterForm
                             ->options([
                                 'CTN' => 'CTN',
                                 'PCK' => 'PCK',
+                                'DOZ' => 'DOZ',
                                 'PCS' => 'PCS',
                             ])
                             ->native(false)

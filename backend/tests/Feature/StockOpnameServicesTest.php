@@ -763,6 +763,25 @@ class StockOpnameServicesTest extends TestCase
             'kode_barang' => 'ITEM-CBG',
             'barcode' => '899CBG',
         ]);
+
+        $forcedBranch = Branch::create([
+            'kode' => 'CBG09',
+            'nama' => 'Cabang 09',
+            'status' => true,
+        ]);
+        $preview = app(ItemMasterBackupService::class)->previewCsv($file, $forcedBranch->id);
+        $forcedStats = app(ItemMasterBackupService::class)->restoreCsv($file, $forcedBranch->id);
+
+        $this->assertEquals('CBG09', $preview['examples'][0]['branch']);
+        $this->assertEquals(['created' => 1, 'updated' => 0, 'skipped' => 0], $forcedStats);
+        $this->assertDatabaseHas('item_masters', [
+            'branch_id' => $forcedBranch->id,
+            'kode_barang' => 'ITEM-CBG',
+        ]);
+
+        $branchBackup = app(ItemMasterBackupService::class)->buildCsv($forcedBranch->id);
+        $this->assertStringContainsString('CBG09', $branchBackup);
+        $this->assertStringNotContainsString('CBG03', $branchBackup);
     }
 
     /** @test */
@@ -1118,6 +1137,81 @@ class StockOpnameServicesTest extends TestCase
         $service->recordFoundItem($session, $data, $officer);
     }
 
+    #[\PHPUnit\Framework\Attributes\Test]
+    public function it_can_update_and_delete_a_found_item(): void
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create(['kode' => 'FOUND-EDIT', 'nama' => 'Found Edit', 'status' => true]);
+        $officer = User::factory()->create(['role' => UserRole::StockOfficer]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::InProgress,
+            'total_items' => 1,
+        ]);
+        $service = app(StockFoundItemService::class);
+        $item = $service->recordFoundItem($session, [
+            'kode_barang' => 'FOUND-EDIT-001',
+            'nama_barang' => 'Barang Lama',
+            'qty_aktual_display' => '1 PCS',
+        ], $officer);
+
+        $updated = $service->updateFoundItem($item, [
+            'kode_barang' => 'FOUND-EDIT-002',
+            'nama_barang' => 'Barang Baru',
+            'qty_aktual_display' => '4 PCS',
+            'note' => 'Dikoreksi',
+        ]);
+
+        $this->assertSame('FOUND-EDIT-002', $updated->kode_barang);
+        $this->assertSame('Barang Baru', $updated->nama_barang);
+        $this->assertSame(4, $updated->qty_aktual_base);
+
+        $service->deleteFoundItem($updated);
+
+        $this->assertModelMissing($updated);
+    }
+
+    #[\PHPUnit\Framework\Attributes\Test]
+    public function stock_officer_can_look_up_items_only_in_their_branch(): void
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $otherBranch = Branch::create(['kode' => 'LOOKUP-OTHER', 'nama' => 'Cabang Lain', 'status' => true]);
+        $principal = Principal::create(['kode' => 'LOOKUP', 'nama' => 'Principal Lookup', 'status' => true]);
+        $officer = User::factory()->create([
+            'role' => UserRole::StockOfficer,
+            'branch_id' => $branch->id,
+        ]);
+
+        ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'LOOKUP-001',
+            'barcode' => '899LOOKUP',
+            'nama_barang' => 'Barang Cabang Petugas',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+        ItemMaster::create([
+            'branch_id' => $otherBranch->id,
+            'kode_barang' => 'LOOKUP-002',
+            'barcode' => '899LOOKUP',
+            'nama_barang' => 'Barang Cabang Lain',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+
+        $this->actingAs($officer);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\ItemLookup::class)
+            ->set('barcode', '899LOOKUP')
+            ->call('searchItem')
+            ->assertSet('items.0.name', 'Barang Cabang Petugas')
+            ->assertCount('items', 1);
+    }
+
     /** @test */
     public function it_formats_one_to_one_items_as_pcs_not_ctn()
     {
@@ -1175,5 +1269,41 @@ class StockOpnameServicesTest extends TestCase
         $this->assertFalse($branchAdmin->isCentralAdmin());
         $this->assertTrue($branchAdmin->managesBranch($branch->id));
         $this->assertFalse($branchAdmin->managesBranch($branch->id + 1));
+    }
+
+    /** @test */
+    public function branch_scoped_daily_close_only_completes_sessions_from_that_branch()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $oldDate = today()->subDays(14)->toDateString();
+        $otherBranch = Branch::create([
+            'kode' => 'OTHER-CLOSE',
+            'nama' => 'Other Close Branch',
+            'status' => true,
+        ]);
+        $principal = Principal::create([
+            'kode' => 'CLOSE-TEST',
+            'nama' => 'Close Test Principal',
+            'status' => true,
+        ]);
+
+        $ownSession = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => $oldDate,
+            'status' => StockSessionStatus::InProgress,
+        ]);
+        $otherSession = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $otherBranch->id,
+            'session_date' => $oldDate,
+            'status' => StockSessionStatus::InProgress,
+        ]);
+
+        $closed = app(StockSessionService::class)->closeSessions($oldDate, $branch->id);
+
+        $this->assertSame(1, $closed);
+        $this->assertSame(StockSessionStatus::Completed, $ownSession->fresh()->status);
+        $this->assertSame(StockSessionStatus::InProgress, $otherSession->fresh()->status);
     }
 }

@@ -1,7 +1,16 @@
 <x-filament-panels::page>
     @php
+        $reportService = app(\App\Services\ReportService::class);
         $comparisonRows = $this->getSelisihComparisonRows();
         $foundItems = $this->getFoundItems();
+        $printSelisihItems = $reportService->getAllSelisihItems($reportDate, $principalId, $branchId)
+            ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+        $printFoundItems = $foundItems
+            ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+        $printPrincipal = $principalId ? \App\Models\Principal::find($principalId)?->nama : 'Semua Principal';
+        $printBranch = $branchId ? \App\Models\Branch::find($branchId)?->nama : 'Semua Cabang';
         $isStockOfficer = auth()->user()?->isStockOfficer();
         $reportSearch = trim($reportSearch ?? '');
         $officerComparisonRows = $comparisonRows
@@ -19,6 +28,224 @@
             ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
     @endphp
+
+    <style>
+        .print-report {
+            display: none;
+        }
+
+        @media print {
+            html,
+            body {
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+                background: #ffffff !important;
+            }
+
+            body *:not(.print-report):not(.print-report *):not(:has(.print-report)) {
+                display: none !important;
+            }
+
+            body *:has(.print-report) {
+                position: static !important;
+                display: block !important;
+                width: auto !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+            }
+
+            .print-report {
+                display: none !important;
+            }
+
+            body[data-print-report="selisih"] .print-selisih,
+            body[data-print-report="comparison"] .print-comparison {
+                display: block !important;
+                position: static !important;
+                width: 100%;
+                background: #ffffff;
+                color: #111827;
+                font-family: Arial, sans-serif;
+                padding: 0;
+            }
+
+            @page {
+                size: A4 portrait;
+                margin: 4mm;
+            }
+
+            .print-report h1 {
+                margin: 0;
+                font-size: 15pt;
+                font-weight: 800;
+            }
+
+            .print-report .meta {
+                margin-top: 1mm;
+                color: #374151;
+                font-size: 10.5pt;
+                line-height: 1.2;
+            }
+
+            .print-report table {
+                width: 100%;
+                margin-top: 3mm;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 12pt;
+                line-height: 1.15;
+            }
+
+            .print-report th,
+            .print-report td {
+                border: 1px solid #111827;
+                padding: 4px 5px;
+                vertical-align: middle;
+            }
+
+            .print-report th {
+                background: #e5e7eb !important;
+                color: #111827;
+                font-size: 11pt;
+                text-transform: uppercase;
+                letter-spacing: 0;
+                text-align: left;
+            }
+
+            .print-report .code {
+                width: 34mm;
+                font-family: Consolas, "Courier New", monospace;
+                font-weight: 700;
+                word-break: break-word;
+            }
+
+            .print-report .name {
+                width: auto;
+                font-family: Tahoma, Arial, sans-serif;
+                font-weight: 700;
+                word-break: break-word;
+            }
+
+            .print-report .qty {
+                width: 40mm;
+                font-family: Consolas, "Courier New", monospace;
+                font-weight: 800;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+            .print-comparison table {
+                font-size: 10.5pt;
+            }
+
+            .print-comparison th {
+                font-size: 9.5pt;
+            }
+
+            .print-comparison .code {
+                width: 25mm;
+            }
+
+            .print-comparison .qty {
+                width: 29mm;
+            }
+
+            .print-comparison .status {
+                width: 27mm;
+                font-weight: 700;
+            }
+        }
+    </style>
+
+    <div class="print-report print-selisih">
+        <h1>Laporan Selisih Stock Opname</h1>
+        <div class="meta">
+            Tanggal: {{ \Carbon\Carbon::parse($reportDate ?: today()->toDateString())->format('d M Y') }}
+            &nbsp;|&nbsp; Principal: {{ $printPrincipal }}
+            &nbsp;|&nbsp; Cabang: {{ $printBranch }}
+            &nbsp;|&nbsp; Total: {{ $printSelisihItems->count() + $printFoundItems->count() }} item
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th class="code">Kode</th>
+                    <th class="name">Nama Barang</th>
+                    <th class="qty">Selisih</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($printSelisihItems as $item)
+                    <tr>
+                        <td class="code">{{ $item->kode_barang }}</td>
+                        <td class="name">{{ $item->nama_barang }}</td>
+                        <td class="qty">{{ $reportService->formatSignedBaseQty($item->selisih, $item) }}</td>
+                    </tr>
+                @empty
+                    @if ($printFoundItems->isEmpty())
+                        <tr>
+                            <td colspan="3" style="text-align: center;">Tidak ada item selisih.</td>
+                        </tr>
+                    @endif
+                @endforelse
+
+                @foreach ($printFoundItems as $item)
+                    <tr>
+                        <td class="code">{{ $item->kode_barang }}</td>
+                        <td class="name">{{ $item->nama_barang }}</td>
+                        <td class="qty">{{ $reportService->formatFoundQty($item) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+
+    <div class="print-report print-comparison">
+        <h1>Perbandingan Selisih Stock Opname</h1>
+        <div class="meta">
+            {{ $comparisonDate ? \Carbon\Carbon::parse($comparisonDate)->format('d M Y') : '-' }}
+            vs {{ \Carbon\Carbon::parse($reportDate)->format('d M Y') }}
+            &nbsp;|&nbsp; Principal: {{ $printPrincipal }}
+            &nbsp;|&nbsp; Cabang: {{ $printBranch }}
+            &nbsp;|&nbsp; Total: {{ $comparisonRows->count() }} item
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th class="code">Kode</th>
+                    <th class="name">Nama Barang</th>
+                    <th class="qty">Sebelumnya</th>
+                    <th class="qty">Sekarang</th>
+                    <th class="qty">Perubahan</th>
+                    <th class="status">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($comparisonRows->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE) as $row)
+                    @php
+                        $sample = $row['to_item'] ?? $row['from_item'];
+                    @endphp
+                    <tr>
+                        <td class="code">{{ $row['kode_barang'] }}</td>
+                        <td class="name">{{ $row['nama_barang'] }}</td>
+                        <td class="qty">{{ $reportService->formatSignedBaseQty($row['from_selisih'], $sample) }}</td>
+                        <td class="qty">{{ $reportService->formatSignedBaseQty($row['to_selisih'], $sample) }}</td>
+                        <td class="qty">{{ $reportService->formatSignedBaseQty($row['change'], $sample) }}</td>
+                        <td class="status">{{ $row['status'] }}</td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="6" style="text-align: center;">Tidak ada data perbandingan.</td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
 
     @if ($isStockOfficer)
         <div class="space-y-3">

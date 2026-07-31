@@ -22,15 +22,41 @@ class StockFoundItemService
             ->first();
     }
 
-    public function findExisting(StockSession $session, string $code): ?StockFoundItem
+    public function findExisting(StockSession $session, string $code, ?int $exceptId = null): ?StockFoundItem
     {
         $code = trim($code);
 
         return $session->foundItems()
+            ->when($exceptId, fn ($query) => $query->whereKeyNot($exceptId))
             ->where(fn ($query) => $query
                 ->where('kode_barang', $code)
                 ->orWhere('barcode', $code))
             ->first();
+    }
+
+    public function updateFoundItem(StockFoundItem $foundItem, array $data): StockFoundItem
+    {
+        $code = trim((string) $data['kode_barang']);
+
+        if ($this->findExisting($foundItem->stockSession, $code, $foundItem->id)) {
+            throw new RuntimeException("Barcode/kode {$code} sudah tercatat sebagai barang temuan di sesi ini.");
+        }
+
+        $foundItem->update([
+            'kode_barang' => $code,
+            'barcode' => $code,
+            'nama_barang' => trim((string) $data['nama_barang']),
+            'qty_aktual_display' => trim((string) $data['qty_aktual_display']),
+            'qty_aktual_base' => max(0, (int) ($data['qty_aktual_base'] ?? $this->baseFallbackFromDisplay($data['qty_aktual_display']))),
+            'note' => $data['note'] ?? null,
+        ]);
+
+        return $foundItem->fresh();
+    }
+
+    public function deleteFoundItem(StockFoundItem $foundItem): void
+    {
+        $foundItem->delete();
     }
 
     public function recordFoundItem(StockSession $session, array $data, User $officer): StockFoundItem
