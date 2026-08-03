@@ -112,7 +112,10 @@ class DamageCheckReports extends Page
 
     public function getPrincipals()
     {
-        return Principal::query()->where('status', true)->orderBy('nama')->get();
+        return Principal::query()
+            ->where('status', true)
+            ->when(! Auth::user()?->isCentralAdmin(), fn ($query) => $query->forBranch(Auth::user()?->branch_id))
+            ->orderBy('nama')->get();
     }
 
     private function filters(): array

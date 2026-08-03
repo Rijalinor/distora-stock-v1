@@ -8,6 +8,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Schema;
 use Illuminate\Validation\Rules\Password;
+use Filament\Schemas\Components\Utilities\Get;
 
 class UserForm
 {
@@ -51,7 +52,7 @@ class UserForm
                     ->dehydrated()
                     ->searchable()
                     ->preload()
-                    ->nullable()
+                    ->required(fn (Get $get): bool => $get('role') === UserRole::StockOfficer->value)
                     ->helperText('Admin boleh dikosongkan. Petugas sebaiknya diisi cabangnya.'),
             ]);
     }

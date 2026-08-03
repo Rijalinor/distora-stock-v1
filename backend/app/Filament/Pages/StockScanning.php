@@ -133,6 +133,10 @@ class StockScanning extends Page
     {
         $session = StockSession::with('principal')->findOrFail($sessionId);
 
+        if (! Auth::user()?->managesBranch($session->branch_id)) {
+            abort(403);
+        }
+
         if (Auth::user()?->isStockOfficer()) {
             app(StockSessionService::class)->assignOfficer($session, Auth::user());
         }

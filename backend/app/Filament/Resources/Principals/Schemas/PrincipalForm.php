@@ -28,6 +28,7 @@ class PrincipalForm
                     ->helperText('Kosongkan jika principal ini berdiri sendiri.')
                     ->options(fn (?Principal $record): array => Principal::query()
                         ->when($record, fn ($query) => $query->whereKeyNot($record->id))
+                        ->when(! auth()->user()?->isCentralAdmin(), fn ($query) => $query->forBranch(auth()->user()?->branch_id))
                         ->whereNull('group_principal_id')
                         ->orderBy('nama')
                         ->pluck('nama', 'id')

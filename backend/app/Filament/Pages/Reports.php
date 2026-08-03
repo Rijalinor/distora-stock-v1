@@ -81,7 +81,7 @@ class Reports extends Page implements HasTable
             ReportStatsOverview::make([
                 'date' => $this->reportDate ?: null,
                 'principalId' => $this->principalId,
-                'branchId' => $this->branchId,
+                'branchId' => $this->effectiveBranchId(),
             ]),
         ];
     }
@@ -166,7 +166,7 @@ class Reports extends Page implements HasTable
 
     public function exportDailyCsv(): StreamedResponse
     {
-        $csv = app(ReportService::class)->buildDailyCsv($this->reportDate, $this->principalId, $this->branchId);
+        $csv = app(ReportService::class)->buildDailyCsv($this->reportDate, $this->principalId, $this->effectiveBranchId());
         $filename = 'laporan-harian-' . $this->reportDate . $this->principalFilenameSuffix() . $this->branchFilenameSuffix() . '.csv';
 
         return response()->streamDownload(
@@ -178,7 +178,7 @@ class Reports extends Page implements HasTable
 
     public function exportSelisihCsv(): StreamedResponse
     {
-        $csv = app(ReportService::class)->buildSelisihCsv($this->reportDate, $this->principalId, $this->branchId);
+        $csv = app(ReportService::class)->buildSelisihCsv($this->reportDate, $this->principalId, $this->effectiveBranchId());
         $filename = 'selisih-' . $this->reportDate . $this->principalFilenameSuffix() . $this->branchFilenameSuffix() . '.csv';
 
         return response()->streamDownload(
@@ -196,7 +196,7 @@ class Reports extends Page implements HasTable
             $this->comparisonDate,
             $this->reportDate,
             $this->principalId,
-            $this->branchId
+            $this->effectiveBranchId()
         );
         $filename = 'perbandingan-selisih-' . $this->comparisonDate . '-vs-' . $this->reportDate . $this->principalFilenameSuffix() . $this->branchFilenameSuffix() . '.csv';
 
@@ -219,13 +219,13 @@ class Reports extends Page implements HasTable
             $this->comparisonDate,
             $this->reportDate,
             $this->principalId,
-            $this->branchId
+            $this->effectiveBranchId()
         );
     }
 
     public function getFoundItems()
     {
-        return app(ReportService::class)->getFoundItems($this->reportDate, $this->principalId, $this->branchId);
+        return app(ReportService::class)->getFoundItems($this->reportDate, $this->principalId, $this->effectiveBranchId());
     }
 
     public function table(Table $table): Table
@@ -243,9 +243,9 @@ class Reports extends Page implements HasTable
                         'stockSession',
                         fn (Builder $q) => $q->where('principal_id', $this->principalId)
                     ))
-                    ->when($this->branchId, fn (Builder $q) => $q->whereHas(
+                    ->when($this->effectiveBranchId(), fn (Builder $q) => $q->whereHas(
                         'stockSession',
-                        fn (Builder $q) => $q->where('branch_id', $this->branchId)
+                        fn (Builder $q) => $q->where('branch_id', $this->effectiveBranchId())
                     ))
             )
             ->columns([
@@ -318,11 +318,13 @@ class Reports extends Page implements HasTable
 
     protected function branchFilenameSuffix(): string
     {
-        if (! $this->branchId) {
+        $branchId = $this->effectiveBranchId();
+
+        if (! $branchId) {
             return '';
         }
 
-        $branch = Branch::find($this->branchId);
+        $branch = Branch::find($branchId);
 
         return $branch ? '-' . str($branch->kode ?: $branch->nama)->slug() : '';
     }
@@ -332,7 +334,12 @@ class Reports extends Page implements HasTable
         $this->comparisonDate = app(ReportService::class)->findPreviousStockDate(
             $this->reportDate ?: today()->toDateString(),
             $this->principalId,
-            $this->branchId
+            $this->effectiveBranchId()
         ) ?? '';
+    }
+
+    private function effectiveBranchId(): ?int
+    {
+        return Auth::user()?->isCentralAdmin() ? $this->branchId : Auth::user()?->branch_id;
     }
 }

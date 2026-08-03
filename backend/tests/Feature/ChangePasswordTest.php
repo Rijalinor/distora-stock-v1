@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Filament\Pages\ChangePassword;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Models\User;
+use App\Models\Branch;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -20,9 +21,12 @@ class ChangePasswordTest extends TestCase
     {
         $officer = User::factory()->create([
             'role' => UserRole::StockOfficer,
+            'branch_id' => Branch::where('kode', 'PUSAT')->value('id'),
         ]);
 
         $this->assertTrue($officer->canAccessPanel(Filament::getPanel('admin')));
+        $branchlessOfficer = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => null]);
+        $this->assertFalse($branchlessOfficer->canAccessPanel(Filament::getPanel('admin')));
     }
 
     public function test_user_can_change_their_own_password(): void
@@ -30,6 +34,7 @@ class ChangePasswordTest extends TestCase
         $user = User::factory()->create([
             'password' => Hash::make('old-password'),
             'role' => UserRole::StockOfficer,
+            'branch_id' => Branch::where('kode', 'PUSAT')->value('id'),
         ]);
 
         $this->actingAs($user);
@@ -51,6 +56,7 @@ class ChangePasswordTest extends TestCase
         $user = User::factory()->create([
             'password' => Hash::make('old-password'),
             'role' => UserRole::StockOfficer,
+            'branch_id' => Branch::where('kode', 'PUSAT')->value('id'),
         ]);
 
         $this->actingAs($user);
@@ -73,6 +79,7 @@ class ChangePasswordTest extends TestCase
         $user = User::factory()->create([
             'password' => Hash::make('old-password'),
             'role' => UserRole::StockOfficer,
+            'branch_id' => Branch::where('kode', 'PUSAT')->value('id'),
         ]);
 
         $this->actingAs($admin);

@@ -26,6 +26,7 @@ class DashboardStatsOverview extends BaseWidget
 
         $sessions = StockSession::query()
             ->whereDate('session_date', $today)
+            ->when(! $user?->isCentralAdmin(), fn ($query) => $query->where('branch_id', $user?->branch_id))
             ->when(
                 $user?->role === UserRole::StockOfficer,
                 fn ($query) => $query->where('assigned_to', $user->id)
@@ -43,6 +44,7 @@ class DashboardStatsOverview extends BaseWidget
 
         $checkedToday = StockSessionItem::query()
             ->whereDate('checked_at', $today)
+            ->when(! $user?->isCentralAdmin(), fn ($query) => $query->whereHas('stockSession', fn ($query) => $query->where('branch_id', $user?->branch_id)))
             ->when(
                 $user?->role === UserRole::StockOfficer,
                 fn ($query) => $query->where('checked_by', $user->id)

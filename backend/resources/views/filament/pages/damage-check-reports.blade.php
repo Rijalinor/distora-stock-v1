@@ -110,7 +110,7 @@
 
                         <div class="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-gray-800">
                             <x-filament::badge :color="$row->status === \App\Enums\DamageCheckStatus::Completed ? 'success' : 'warning'">{{ $row->status === \App\Enums\DamageCheckStatus::Completed ? 'Selesai' : 'Berjalan' }}</x-filament::badge>
-                            <div class="text-right"><span class="font-bold">{{ $row->items_count }} jenis</span><span class="mx-1 text-gray-400">·</span><span class="font-bold text-danger-600">{{ $row->items_sum_qty_rusak_base ?? 0 }} PCS</span></div>
+                            <div class="text-right"><span class="font-bold">{{ $row->items_count + $row->pending_items_count }} jenis</span><span class="mx-1 text-gray-400">·</span><span class="font-bold text-danger-600">{{ ($row->items_sum_qty_rusak_base ?? 0) + ($row->pending_items_sum_qty_rusak_base ?? 0) }} PCS</span></div>
                         </div>
                     </button>
                 @empty

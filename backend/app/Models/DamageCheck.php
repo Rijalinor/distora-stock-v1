@@ -56,4 +56,9 @@ class DamageCheck extends Model
     {
         return $this->hasMany(DamageCheckItem::class);
     }
+
+    public function pendingItems()
+    {
+        return $this->hasMany(DamageCheckPendingItem::class);
+    }
 }

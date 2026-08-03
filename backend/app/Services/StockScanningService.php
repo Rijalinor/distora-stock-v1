@@ -72,7 +72,8 @@ class StockScanningService
             ->where('branch_id', $session->branch_id)
             ->where(fn ($query) => $query
                 ->where('barcode', $barcode)
-                ->orWhere('kode_barang', $barcode))
+                ->orWhere('kode_barang', $barcode)
+                ->orWhereHas('barcodes', fn ($query) => $query->where('barcode', $barcode)))
             ->pluck('id');
 
         return StockSessionItem::query()
@@ -80,7 +81,7 @@ class StockScanningService
             ->where(fn ($query) => $query
                 ->where('kode_barang', $barcode)
                 ->when($itemMasterIds->isNotEmpty(), fn ($query) => $query->orWhereIn('item_master_id', $itemMasterIds)))
-            ->with('itemMaster')
+            ->with('itemMaster.barcodes')
             ->orderBy('kode_barang')
             ->get();
     }
@@ -94,7 +95,7 @@ class StockScanningService
 
         return StockSessionItem::query()
             ->where('stock_session_id', $session->id)
-            ->with('itemMaster')
+            ->with('itemMaster.barcodes')
             ->get()
             ->map(fn (StockSessionItem $item) => [
                 'item' => $item,
@@ -119,6 +120,7 @@ class StockScanningService
             $item->satuan,
             $item->itemMaster?->kode_barang,
             $item->itemMaster?->barcode,
+            ...($item->itemMaster?->barcodes?->pluck('barcode')->all() ?? []),
             $item->itemMaster?->nama_barang,
         ])
             ->filter()

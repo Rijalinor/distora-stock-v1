@@ -48,11 +48,12 @@ class ItemLookup extends Page
 
         $user = Auth::user();
         $query = ItemMaster::query()
-            ->with(['principal', 'branch'])
+            ->with(['principal', 'branch', 'barcodes'])
             ->where('status', true)
             ->where(fn ($query) => $query
                 ->where('barcode', $this->barcode)
-                ->orWhere('kode_barang', $this->barcode));
+                ->orWhere('kode_barang', $this->barcode)
+                ->orWhereHas('barcodes', fn ($query) => $query->where('barcode', $this->barcode)));
 
         if (! $user->isCentralAdmin()) {
             $query->where('branch_id', $user->branch_id);
@@ -61,7 +62,7 @@ class ItemLookup extends Page
         $this->items = $query->orderBy('nama_barang')->get()->map(fn (ItemMaster $item): array => [
             'id' => $item->id,
             'code' => $item->kode_barang,
-            'barcode' => $item->barcode,
+            'barcode' => $item->barcodes->map(fn ($barcode) => "{$barcode->barcode} ({$barcode->unit_label}: {$barcode->qty_base} PCS)")->implode(', ') ?: $item->barcode,
             'name' => $item->nama_barang,
             'principal' => $item->principal?->nama ?? '-',
             'branch' => $item->branch?->nama ?? '-',

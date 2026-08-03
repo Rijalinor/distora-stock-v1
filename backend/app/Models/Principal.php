@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
 class Principal extends Model
 {
@@ -31,6 +32,14 @@ class Principal extends Model
     public function stockSessions()
     {
         return $this->hasMany(StockSession::class);
+    }
+
+    public function scopeForBranch(Builder $query, ?int $branchId): Builder
+    {
+        return $query->when($branchId, fn (Builder $query) => $query->whereHas(
+            'itemMasters',
+            fn (Builder $query) => $query->where('branch_id', $branchId)
+        ));
     }
 
     public function effectivePrincipalId(): int

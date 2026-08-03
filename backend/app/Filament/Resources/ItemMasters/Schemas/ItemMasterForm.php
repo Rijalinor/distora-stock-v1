@@ -8,11 +8,10 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\ViewField;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
+use Filament\Schemas\Components\View;
 
 class ItemMasterForm
 {
@@ -22,18 +21,6 @@ class ItemMasterForm
             ->components([
                 TextInput::make('kode_barang')
                     ->required(),
-                TextInput::make('barcode')
-                    ->default(null)
-                    ->suffixAction(
-                        Action::make('scanBarcode')
-                            ->label('Scan Kamera')
-                            ->icon(Heroicon::OutlinedQrCode)
-                            ->extraAttributes([
-                                'x-on:click.prevent' => "window.dispatchEvent(new CustomEvent('item-master-open-barcode-scanner'))",
-                            ]),
-                    ),
-                ViewField::make('barcode_scanner')
-                    ->view('filament.forms.components.barcode-scanner'),
                 TextInput::make('nama_barang')
                     ->required(),
                 Select::make('branch_id')
@@ -60,6 +47,7 @@ class ItemMasterForm
                     ->minItems(1)
                     ->addActionLabel('Tambah satuan')
                     ->reorderable()
+                    ->columnSpanFull()
                     ->columns(2)
                     ->schema([
                         Select::make('label')
@@ -87,6 +75,43 @@ class ItemMasterForm
                             ->required()
                             ->helperText('Contoh: CTN isi 12 PCS, maka isi 12. Untuk PCS isi 1.'),
                     ]),
+                Repeater::make('barcodes')
+                    ->relationship()
+                    ->label('Barcode Kemasan')
+                    ->helperText('Satu barang dapat memiliki barcode PCS, PCK, dan CTN. Qty PCS per scan menentukan jumlah yang ditambahkan saat barcode dipindai.')
+                    ->addActionLabel('Tambah barcode kemasan')
+                    ->defaultItems(0)
+                    ->columnSpanFull()
+                    ->columns(['default' => 1, 'md' => 12])
+                    ->schema([
+                        TextInput::make('barcode')
+                            ->label('Barcode')
+                            ->required()
+                            ->distinct()
+                            ->columnSpan(['default' => 1, 'md' => 5])
+                            ->suffixAction(Action::make('scan')
+                                ->icon('heroicon-m-camera')
+                                ->tooltip('Scan dengan kamera')
+                                ->extraAttributes(['x-on:click' => '$dispatch(\'item-master-open-barcode-scanner\', { input: $el.closest(\'.fi-input-wrp\')?.querySelector(\'input\') })'])),
+                        Select::make('unit_label')
+                            ->label('Kemasan')
+                            ->options(['PCS' => 'PCS', 'PCK' => 'PCK', 'CTN' => 'CTN', 'DOZ' => 'DOZ'])
+                            ->default('PCS')
+                            ->columnSpan(['default' => 1, 'md' => 3])
+                            ->required(),
+                        TextInput::make('qty_base')
+                            ->label('Qty PCS per scan')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(1)
+                            ->columnSpan(['default' => 1, 'md' => 2])
+                            ->required(),
+                        Toggle::make('is_primary')
+                            ->label('Barcode Utama')
+                            ->columnSpan(['default' => 1, 'md' => 2]),
+                    ]),
+                View::make('filament.forms.components.barcode-scanner')
+                    ->columnSpanFull(),
                 Toggle::make('status')
                     ->required(),
             ]);

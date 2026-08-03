@@ -101,6 +101,10 @@ class StockSessionService
      */
     public function assignOfficer(StockSession $session, User $officer): void
     {
+        if (! $officer->isStockOfficer() || ! $officer->branch_id || (int) $officer->branch_id !== (int) $session->branch_id) {
+            throw new \RuntimeException('Petugas harus berasal dari cabang sesi yang sama.');
+        }
+
         $before = [
             'assigned_to' => $session->assigned_to,
             'status' => $session->status?->value,

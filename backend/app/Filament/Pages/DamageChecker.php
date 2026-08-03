@@ -8,6 +8,7 @@ use App\Models\DamageCheck;
 use App\Models\DamageCheckItem;
 use App\Models\ItemMaster;
 use App\Models\Principal;
+use App\Models\DamageCheckPendingItem;
 use App\Services\DamageCheckService;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -39,8 +40,15 @@ class DamageChecker extends Page
     public string $barcode = '';
     public string $itemSearch = '';
     public int $itemsLimit = 10;
+    public bool $showPendingForm = false;
+    public string $pendingBarcode = '';
+    public string $pendingItemName = '';
+    public ?int $pendingPrincipalId = null;
+    public string $pendingUnitLabel = 'PCS';
+    public int $pendingQtyPerScan = 1;
+    public string $pendingNotes = '';
 
-    /** @var array<int, array{id:int, code:string, name:string, principal:string}> */
+    /** @var array<int, array{id:int, code:string, name:string, principal:string, qty_base:int, unit:string}> */
     public array $scanCandidates = [];
 
     public function mount(): void
@@ -198,8 +206,18 @@ class DamageChecker extends Page
         $items = app(DamageCheckService::class)->findItems($check, $this->barcode);
 
         if ($items->isEmpty()) {
-            Notification::make()->title('Barcode tidak ditemukan')->body('Periksa barcode, cabang, dan principal pada header.')->danger()->send();
+            $pending = app(DamageCheckService::class)->findPendingItem($check, $this->barcode);
+            if ($pending) {
+                $row = app(DamageCheckService::class)->scanPending($check, $pending, Auth::user());
+                $this->barcode = '';
+                Notification::make()->title('Barang pending berhasil discan')->body("{$pending->item_name} — total {$row->qty_rusak_display}")->success()->send();
+                $this->dispatch('damage-scan-success');
+                return;
+            }
+
+            $this->pendingBarcode = $this->barcode;
             $this->barcode = '';
+            $this->showPendingForm = true;
             $this->dispatch('damage-scan-failed');
 
             return;
@@ -211,6 +229,8 @@ class DamageChecker extends Page
                 'code' => $item->kode_barang,
                 'name' => $item->nama_barang,
                 'principal' => $item->principal?->nama ?? '-',
+                'qty_base' => (int) ($item->scan_qty_base ?? 1),
+                'unit' => (string) ($item->scan_unit_label ?? 'PCS'),
             ])->all();
             $this->barcode = '';
 
@@ -220,13 +240,51 @@ class DamageChecker extends Page
         $this->recordItem($items->first());
     }
 
+    public function createPendingItem(): void
+    {
+        $data = $this->validate([
+            'pendingBarcode' => ['required', 'string', 'max:255'],
+            'pendingItemName' => ['required', 'string', 'max:255'],
+            'pendingPrincipalId' => ['nullable', 'exists:principals,id'],
+            'pendingUnitLabel' => ['required', 'string', 'max:20'],
+            'pendingQtyPerScan' => ['required', 'integer', 'min:1', 'max:100000'],
+            'pendingNotes' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $row = app(DamageCheckService::class)->createAndScanPending($this->getSelectedCheck(), [
+            'barcode' => $data['pendingBarcode'], 'item_name' => $data['pendingItemName'],
+            'principal_id' => $data['pendingPrincipalId'], 'unit_label' => $data['pendingUnitLabel'],
+            'qty_per_scan' => $data['pendingQtyPerScan'], 'notes' => $data['pendingNotes'],
+        ], Auth::user());
+        $this->cancelPendingItem();
+        Notification::make()->title('Barang pending ditambahkan')->body("Langsung tercatat {$row->qty_rusak_display} dan dapat discan checker lain.")->success()->send();
+    }
+
+    public function cancelPendingItem(): void
+    {
+        $this->reset(['showPendingForm', 'pendingBarcode', 'pendingItemName', 'pendingPrincipalId', 'pendingNotes']);
+        $this->pendingUnitLabel = 'PCS';
+        $this->pendingQtyPerScan = 1;
+    }
+
+    public function changePendingQuantity(int $itemId, int $change): void
+    {
+        $item = $this->selectedPendingItem($itemId);
+        app(DamageCheckService::class)->updatePendingQuantity($item, $item->qty_rusak_base + $change);
+    }
+
+    public function deletePendingItem(int $itemId): void
+    {
+        app(DamageCheckService::class)->deletePendingItem($this->selectedPendingItem($itemId));
+    }
+
     public function chooseCandidate(int $itemId): void
     {
         $check = $this->getSelectedCheck();
         $item = ItemMaster::findOrFail($itemId);
+        $candidate = collect($this->scanCandidates)->firstWhere('id', $itemId);
 
         if ($check) {
-            $this->recordItem($item);
+            $this->recordItem($item, (int) ($candidate['qty_base'] ?? 1));
         }
     }
 
@@ -271,6 +329,8 @@ class DamageChecker extends Page
             ->with(['branch', 'principal', 'officer', 'checkers'])
             ->withCount(['items', 'checkers'])
             ->withSum('items', 'qty_rusak_base')
+            ->withCount('pendingItems')
+            ->withSum('pendingItems', 'qty_rusak_base')
             ->find($this->selectedCheckId);
     }
 
@@ -288,13 +348,22 @@ class DamageChecker extends Page
                 $query->whereHas('itemMaster', fn ($query) => $query
                     ->where('nama_barang', 'like', $search)
                     ->orWhere('kode_barang', 'like', $search)
-                    ->orWhere('barcode', 'like', $search));
+                    ->orWhere('barcode', 'like', $search)
+                    ->orWhereHas('barcodes', fn ($query) => $query->where('barcode', 'like', $search)));
             });
 
         return [
             'items' => (clone $query)->orderByDesc('last_scanned_at')->orderByDesc('id')->limit($this->itemsLimit)->get(),
             'total' => $query->count(),
         ];
+    }
+
+    public function getPendingItemsData()
+    {
+        return DamageCheckPendingItem::query()
+            ->with(['pendingItem.principal', 'lastScanner'])
+            ->where('damage_check_id', $this->selectedCheckId)
+            ->orderByDesc('last_scanned_at')->get();
     }
 
     public function loadMoreItems(): void
@@ -324,7 +393,10 @@ class DamageChecker extends Page
 
     public function getPrincipals()
     {
-        return Principal::query()->where('status', true)->orderBy('nama')->get();
+        return Principal::query()
+            ->where('status', true)
+            ->when(! Auth::user()?->isCentralAdmin(), fn ($query) => $query->forBranch(Auth::user()?->branch_id))
+            ->orderBy('nama')->get();
     }
 
     public function canCompleteSelectedCheck(): bool
@@ -342,9 +414,10 @@ class DamageChecker extends Page
         return $check && (int) $check->officer_id === (int) Auth::id();
     }
 
-    private function recordItem(ItemMaster $item): void
+    private function recordItem(ItemMaster $item, ?int $scanQtyBase = null): void
     {
-        $row = app(DamageCheckService::class)->scan($this->getSelectedCheck(), $item, Auth::user());
+        $scanQtyBase ??= (int) ($item->scan_qty_base ?? 1);
+        $row = app(DamageCheckService::class)->scan($this->getSelectedCheck(), $item, Auth::user(), $scanQtyBase);
         $this->reset(['barcode', 'scanCandidates']);
         Notification::make()
             ->title('Scan berhasil')
@@ -360,6 +433,11 @@ class DamageChecker extends Page
         return DamageCheckItem::query()
             ->where('damage_check_id', $this->getSelectedCheck()?->id)
             ->findOrFail($itemId);
+    }
+
+    private function selectedPendingItem(int $itemId): DamageCheckPendingItem
+    {
+        return DamageCheckPendingItem::where('damage_check_id', $this->getSelectedCheck()?->id)->findOrFail($itemId);
     }
 
     private function accessibleChecks()

@@ -6,6 +6,7 @@ use App\Enums\DamageCheckStatus;
 use App\Enums\UserRole;
 use App\Models\Branch;
 use App\Models\ItemMaster;
+use App\Models\ItemBarcode;
 use App\Models\Principal;
 use App\Models\User;
 use App\Services\DamageCheckService;
@@ -192,6 +193,78 @@ class DamageCheckTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Hanya admin atau pembuat header');
         $service->complete($check, $secondChecker);
+    }
+
+    #[Test]
+    public function package_barcodes_add_their_configured_piece_quantity(): void
+    {
+        [$officer, $item] = $this->makeOfficerAndItem();
+        $cartonBarcode = ItemBarcode::create([
+            'item_master_id' => $item->id,
+            'branch_id' => $item->branch_id,
+            'barcode' => 'CTN-DAMAGE-24',
+            'unit_label' => 'CTN',
+            'qty_base' => 24,
+            'is_primary' => true,
+        ]);
+        $pieceBarcode = ItemBarcode::create([
+            'item_master_id' => $item->id,
+            'branch_id' => $item->branch_id,
+            'barcode' => 'PCS-DAMAGE-1',
+            'unit_label' => 'PCS',
+            'qty_base' => 1,
+        ]);
+        $service = app(DamageCheckService::class);
+        $check = $service->create([
+            'check_date' => today()->toDateString(),
+            'branch_id' => $officer->branch_id,
+            'principal_id' => null,
+            'location' => 'Gudang Kemasan',
+            'notes' => null,
+            'join_pin' => '1234',
+        ], $officer);
+
+        $cartonItem = $service->findItems($check, 'CTN-DAMAGE-24')->firstOrFail();
+        $row = $service->scan($check, $cartonItem, $officer, $cartonItem->scan_qty_base);
+        $pieceItem = $service->findItems($check, 'PCS-DAMAGE-1')->firstOrFail();
+        $row = $service->scan($check, $pieceItem, $officer, $pieceItem->scan_qty_base);
+
+        $this->assertSame(25, $row->qty_rusak_base);
+        $this->assertSame('25 PCS', $row->qty_rusak_display);
+        $this->assertSame($item->id, app(\App\Services\StockFoundItemService::class)->findItemMaster(
+            \App\Models\StockSession::make(['branch_id' => $item->branch_id]),
+            'CTN-DAMAGE-24'
+        )->id);
+
+        $cartonBarcode->delete();
+        $this->assertTrue($pieceBarcode->fresh()->is_primary);
+        $this->assertSame('PCS-DAMAGE-1', $item->fresh()->barcode);
+    }
+
+    #[Test]
+    public function pending_items_are_shared_by_branch_and_included_in_reports(): void
+    {
+        [$owner] = $this->makeOfficerAndItem();
+        $checker = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $owner->branch_id]);
+        $service = app(DamageCheckService::class);
+        $check = $service->create([
+            'check_date' => '2026-08-03', 'branch_id' => $owner->branch_id,
+            'principal_id' => null, 'location' => 'Gudang Lama', 'notes' => null, 'join_pin' => '1234',
+        ], $owner);
+        $service->join($check, $checker, '1234');
+
+        $row = $service->createAndScanPending($check, [
+            'barcode' => 'OLD-UNKNOWN-01', 'item_name' => 'Barang Sangat Lama',
+            'principal_id' => null, 'unit_label' => 'CTN', 'qty_per_scan' => 12, 'notes' => 'Kemasan lama',
+        ], $owner);
+        $pending = $service->findPendingItem($check, 'OLD-UNKNOWN-01');
+        $row = $service->scanPending($check, $pending, $checker);
+
+        $this->assertSame(24, $row->qty_rusak_base);
+        $filters = ['date_from' => '2026-08-03', 'date_to' => '2026-08-03', 'branch_id' => $owner->branch_id, 'principal_id' => null, 'status' => null];
+        $report = app(DamageCheckReportService::class);
+        $this->assertSame(['checks' => 1, 'items' => 1, 'pieces' => 24], $report->summary($owner, $filters));
+        $this->assertStringContainsString('Barang Sangat Lama [PENDING]', $report->buildCsv($owner, $filters));
     }
 
     private function makeOfficerAndItem(): array

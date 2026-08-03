@@ -124,6 +124,6 @@ class User extends Authenticatable implements FilamentUser
     }
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->isAdmin() || $this->isStockOfficer();
+        return $this->isAdmin() || ($this->isStockOfficer() && filled($this->branch_id));
     }
 }

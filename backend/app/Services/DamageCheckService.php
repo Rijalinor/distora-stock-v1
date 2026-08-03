@@ -6,6 +6,8 @@ use App\Enums\DamageCheckStatus;
 use App\Models\DamageCheck;
 use App\Models\DamageCheckItem;
 use App\Models\ItemMaster;
+use App\Models\PendingItem;
+use App\Models\DamageCheckPendingItem;
 use App\Models\User;
 use App\Enums\UserRole;
 use Illuminate\Support\Collection;
@@ -127,18 +129,29 @@ class DamageCheckService
         $barcode = trim($barcode);
 
         return ItemMaster::query()
-            ->with('principal')
+            ->with([
+                'principal',
+                'barcodes' => fn ($query) => $query->where('barcode', $barcode),
+            ])
             ->where('status', true)
             ->where('branch_id', $check->branch_id)
             ->when($check->principal_id, fn ($query) => $query->where('principal_id', $check->principal_id))
-            ->where(fn ($query) => $query->where('barcode', $barcode)->orWhere('kode_barang', $barcode))
+            ->where(fn ($query) => $query
+                ->where('barcode', $barcode)
+                ->orWhere('kode_barang', $barcode)
+                ->orWhereHas('barcodes', fn ($query) => $query->where('barcode', $barcode)))
             ->orderBy('nama_barang')
-            ->get();
+            ->get()
+            ->each(function (ItemMaster $item) use ($barcode): void {
+                $mapping = $item->barcodes->firstWhere('barcode', $barcode);
+                $item->setAttribute('scan_qty_base', $mapping?->qty_base ?? 1);
+                $item->setAttribute('scan_unit_label', $mapping?->unit_label ?? 'PCS');
+            });
     }
 
-    public function scan(DamageCheck $check, ItemMaster $item, ?User $scanner = null): DamageCheckItem
+    public function scan(DamageCheck $check, ItemMaster $item, ?User $scanner = null, int $scanQtyBase = 1): DamageCheckItem
     {
-        return DB::transaction(function () use ($check, $item, $scanner): DamageCheckItem {
+        return DB::transaction(function () use ($check, $item, $scanner, $scanQtyBase): DamageCheckItem {
             $check = DamageCheck::query()->lockForUpdate()->findOrFail($check->id);
             $this->ensureOpen($check);
 
@@ -150,6 +163,8 @@ class DamageCheckService
                 throw new RuntimeException('Barang tidak sesuai dengan cabang atau principal header.');
             }
 
+            $scanQtyBase = max(1, $scanQtyBase);
+
             $row = DamageCheckItem::query()
                 ->where('damage_check_id', $check->id)
                 ->where('item_master_id', $item->id)
@@ -157,7 +172,7 @@ class DamageCheckService
                 ->first();
 
             if ($row) {
-                $row->increment('qty_rusak_base');
+                $row->increment('qty_rusak_base', $scanQtyBase);
                 $row->update([
                     'qty_rusak_display' => $row->qty_rusak_base . ' PCS',
                     'last_scanned_at' => now(),
@@ -170,12 +185,100 @@ class DamageCheckService
             return DamageCheckItem::create([
                 'damage_check_id' => $check->id,
                 'item_master_id' => $item->id,
-                'qty_rusak_base' => 1,
-                'qty_rusak_display' => '1 PCS',
+                'qty_rusak_base' => $scanQtyBase,
+                'qty_rusak_display' => $scanQtyBase . ' PCS',
                 'last_scanned_at' => now(),
                 'last_scanned_by' => $scanner?->id,
             ])->load('itemMaster');
         });
+    }
+
+    public function findPendingItem(DamageCheck $check, string $barcode): ?PendingItem
+    {
+        return PendingItem::query()
+            ->where('branch_id', $check->branch_id)
+            ->where('barcode', trim($barcode))
+            ->where('status', 'pending')
+            ->first();
+    }
+
+    public function createAndScanPending(DamageCheck $check, array $data, User $scanner): DamageCheckPendingItem
+    {
+        return DB::transaction(function () use ($check, $data, $scanner): DamageCheckPendingItem {
+            $pending = PendingItem::firstOrCreate(
+                ['branch_id' => $check->branch_id, 'barcode' => trim($data['barcode'])],
+                [
+                    'temporary_code' => 'PENDING-' . now()->format('YmdHis'),
+                    'item_name' => trim($data['item_name']),
+                    'principal_id' => $data['principal_id'] ?: null,
+                    'unit_label' => strtoupper(trim($data['unit_label'] ?: 'PCS')),
+                    'qty_per_scan' => max(1, (int) $data['qty_per_scan']),
+                    'status' => 'pending',
+                    'created_by' => $scanner->id,
+                    'notes' => trim($data['notes'] ?? '') ?: null,
+                ]
+            );
+
+            return $this->scanPending($check, $pending, $scanner);
+        });
+    }
+
+    public function scanPending(DamageCheck $check, PendingItem $pending, User $scanner): DamageCheckPendingItem
+    {
+        return DB::transaction(function () use ($check, $pending, $scanner): DamageCheckPendingItem {
+            $check = DamageCheck::query()->lockForUpdate()->findOrFail($check->id);
+            $this->ensureOpen($check);
+
+            if (! $scanner->isAdmin() && ! $check->checkers()->whereKey($scanner->id)->exists()) {
+                throw new RuntimeException('Anda tidak ditugaskan sebagai checker pada pemeriksaan ini.');
+            }
+
+            if ((int) $pending->branch_id !== (int) $check->branch_id || $pending->status !== 'pending') {
+                throw new RuntimeException('Barang pending tidak tersedia untuk sesi ini.');
+            }
+
+            $quantity = max(1, (int) $pending->qty_per_scan);
+            $row = DamageCheckPendingItem::query()
+                ->where('damage_check_id', $check->id)
+                ->where('pending_item_id', $pending->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($row) {
+                $row->increment('qty_rusak_base', $quantity);
+                $row->update([
+                    'qty_rusak_display' => $row->qty_rusak_base . ' PCS',
+                    'last_scanned_at' => now(),
+                    'last_scanned_by' => $scanner->id,
+                ]);
+
+                return $row->fresh('pendingItem');
+            }
+
+            return DamageCheckPendingItem::create([
+                'damage_check_id' => $check->id,
+                'pending_item_id' => $pending->id,
+                'qty_rusak_base' => $quantity,
+                'qty_rusak_display' => $quantity . ' PCS',
+                'last_scanned_at' => now(),
+                'last_scanned_by' => $scanner->id,
+            ])->load('pendingItem');
+        });
+    }
+
+    public function updatePendingQuantity(DamageCheckPendingItem $item, int $quantity): void
+    {
+        $this->ensureOpen($item->damageCheck);
+        if ($quantity < 1) {
+            throw new RuntimeException('Qty minimal 1 PCS. Hapus baris jika salah scan.');
+        }
+        $item->update(['qty_rusak_base' => $quantity, 'qty_rusak_display' => $quantity . ' PCS']);
+    }
+
+    public function deletePendingItem(DamageCheckPendingItem $item): void
+    {
+        $this->ensureOpen($item->damageCheck);
+        $item->delete();
     }
 
     public function updateQuantity(DamageCheckItem $item, int $quantity): DamageCheckItem
@@ -208,7 +311,7 @@ class DamageCheckService
             throw new RuntimeException('Hanya admin atau pembuat header yang dapat menyelesaikan pemeriksaan.');
         }
 
-        if (! $check->items()->exists()) {
+        if (! $check->items()->exists() && ! $check->pendingItems()->exists()) {
             throw new RuntimeException('Belum ada barang rusak yang tercatat.');
         }
 

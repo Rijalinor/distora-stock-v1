@@ -15,6 +15,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 class StockSessionsTable
 {
@@ -114,7 +115,9 @@ class StockSessionsTable
 
                 SelectFilter::make('assigned_to')
                     ->label('Petugas Utama')
-                    ->options(fn () => User::where('role', UserRole::StockOfficer)->pluck('name', 'id')),
+                    ->options(fn () => User::where('role', UserRole::StockOfficer)
+                        ->when(! Auth::user()?->isCentralAdmin(), fn ($query) => $query->where('branch_id', Auth::user()?->branch_id))
+                        ->pluck('name', 'id')),
             ])
             ->recordActions([
                 ViewAction::make(),
@@ -126,7 +129,7 @@ class StockSessionsTable
                     ->form([
                         Select::make('officer_id')
                             ->label('Pilih Petugas')
-                            ->options(fn () => User::where('role', UserRole::StockOfficer)->pluck('name', 'id'))
+                            ->options(fn ($record) => User::where('role', UserRole::StockOfficer)->where('branch_id', $record->branch_id)->pluck('name', 'id'))
                             ->required()
                             ->searchable(),
                     ])

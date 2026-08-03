@@ -4,8 +4,10 @@
         detector: null,
         scanning: false,
         visible: false,
+        targetInput: null,
         status: 'Kamera belum aktif',
-        async openScanner() {
+        async openScanner(input = null) {
+            this.targetInput = input || this.targetInput;
             this.visible = true;
 
             if (! navigator.mediaDevices?.getUserMedia) {
@@ -49,7 +51,11 @@
                     const value = codes[0].rawValue?.trim();
 
                     if (value) {
-                        $wire.set('data.barcode', value);
+                        if (this.targetInput) {
+                            this.targetInput.value = value;
+                            this.targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            this.targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
                         this.status = `Barcode terbaca: ${value}`;
                         this.stopScanner();
                         return;
@@ -76,14 +82,14 @@
             }
         },
     }"
-    x-on:item-master-open-barcode-scanner.window="openScanner()"
+    x-on:item-master-open-barcode-scanner.window="openScanner($event.detail.input)"
     x-on:keydown.escape.window="if (visible) { stopScanner(); visible = false; }"
-    class="mt-3 space-y-3"
+    class="space-y-3"
 >
     <div
         x-show="visible"
         x-cloak
-        class="overflow-hidden rounded-2xl border border-gray-200 bg-gray-950/90 shadow-sm dark:border-gray-700"
+        class="mx-auto max-w-2xl overflow-hidden rounded-2xl border border-gray-200 bg-gray-950/90 shadow-sm dark:border-gray-700"
     >
         <div class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-sm text-gray-200">
             <span class="font-semibold">Scanner Barcode</span>
@@ -96,7 +102,7 @@
             </button>
         </div>
 
-        <video x-ref="video" class="aspect-[4/3] w-full bg-black object-cover" playsinline muted></video>
+        <div class="aspect-video w-full bg-black"><video x-ref="video" class="h-full w-full object-cover" playsinline muted></video></div>
 
         <div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p class="text-sm text-gray-200" x-text="status"></p>

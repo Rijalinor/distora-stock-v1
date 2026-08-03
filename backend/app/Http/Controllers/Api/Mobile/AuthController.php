@@ -26,6 +26,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Akun tidak diizinkan untuk mobile.'], 403);
         }
 
+        if ($user->isStockOfficer() && ! $user->branch_id) {
+            return response()->json(['message' => 'Akun stock officer belum memiliki cabang.'], 403);
+        }
+
         $token = $user->issueMobileApiToken();
 
         return response()->json([

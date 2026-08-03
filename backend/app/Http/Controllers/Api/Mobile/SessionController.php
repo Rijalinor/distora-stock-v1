@@ -14,6 +14,10 @@ class SessionController extends Controller
     {
         $user = $request->user();
 
+        if (! $user->isCentralAdmin() && ! $user->branch_id) {
+            return response()->json(['message' => 'Akun belum memiliki cabang.'], 403);
+        }
+
         $query = StockSession::query()
             ->with(['principal', 'branch', 'assignedOfficer', 'officers'])
             ->whereDate('session_date', today())
@@ -52,6 +56,10 @@ class SessionController extends Controller
     public function show(StockSession $session): JsonResponse
     {
         $user = request()->user();
+
+        if (! $user->isCentralAdmin() && ! $user->branch_id) {
+            return response()->json(['message' => 'Akun belum memiliki cabang.'], 403);
+        }
 
         if ($user && ! $user->isCentralAdmin() && $user->branch_id && $session->branch_id !== $user->branch_id) {
             return response()->json(['message' => 'Forbidden'], 403);

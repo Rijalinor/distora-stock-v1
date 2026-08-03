@@ -15,6 +15,10 @@ class ScanController extends Controller
     {
         $user = $request->user();
 
+        if (! $user->isCentralAdmin() && ! $user->branch_id) {
+            return response()->json(['message' => 'Akun belum memiliki cabang.'], 403);
+        }
+
         if ($user && ! $user->isCentralAdmin() && $user->branch_id && $session->branch_id !== $user->branch_id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }

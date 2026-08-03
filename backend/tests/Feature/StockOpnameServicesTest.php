@@ -7,6 +7,7 @@ use App\Enums\StockSessionItemStatus;
 use App\Enums\StockSessionStatus;
 use App\Enums\UserRole;
 use App\Filament\Resources\ItemMasters\ItemMasterResource;
+use App\Filament\Resources\Principals\PrincipalResource;
 use App\Models\Branch;
 use App\Models\CsvUpload;
 use App\Models\ItemMaster;
@@ -88,9 +89,9 @@ class StockOpnameServicesTest extends TestCase
     /** @test */
     public function it_can_sync_database_and_generate_sessions_from_parsed_csv_data()
     {
-        $officer = User::factory()->create(['role' => UserRole::StockOfficer]);
         $admin = User::factory()->create(['role' => UserRole::Admin]);
         $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $officer = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
 
         // Mock parsed rows
         $rows = [
@@ -245,8 +246,8 @@ class StockOpnameServicesTest extends TestCase
             'nama' => 'Principal Lock',
             'status' => true,
         ]);
-        $firstOfficer = User::factory()->create(['role' => UserRole::StockOfficer]);
-        $secondOfficer = User::factory()->create(['role' => UserRole::StockOfficer]);
+        $firstOfficer = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
+        $secondOfficer = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
         $session = StockSession::create([
             'principal_id' => $principal->id,
             'branch_id' => $branch->id,
@@ -279,6 +280,23 @@ class StockOpnameServicesTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
         $scanningService->acquireLock($item->fresh(), $secondOfficer);
+    }
+
+    /** @test */
+    public function it_rejects_assigning_an_officer_from_another_branch()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $otherBranch = Branch::create(['kode' => 'SEC02', 'nama' => 'Cabang Security', 'status' => true]);
+        $principal = Principal::create(['kode' => 'SEC', 'nama' => 'Principal Security', 'status' => true]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id, 'branch_id' => $branch->id,
+            'session_date' => today(), 'status' => StockSessionStatus::Open, 'total_items' => 0,
+        ]);
+        $otherOfficer = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $otherBranch->id]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('cabang sesi yang sama');
+        app(StockSessionService::class)->assignOfficer($session, $otherOfficer);
     }
 
     /** @test */
@@ -726,6 +744,11 @@ class StockOpnameServicesTest extends TestCase
             'principal_id' => $principal->id,
             'status' => true,
         ]);
+        $otherPrincipal = Principal::create(['kode' => 'P021', 'nama' => 'Principal Cabang Lain', 'status' => true]);
+        ItemMaster::create([
+            'branch_id' => $otherBranch->id, 'kode_barang' => 'OTHER-PRINCIPAL-ITEM',
+            'nama_barang' => 'Barang Principal Lain', 'principal_id' => $otherPrincipal->id, 'status' => true,
+        ]);
         $branchAdmin = User::factory()->create(['role' => UserRole::Admin, 'branch_id' => $branch->id]);
         $centralAdmin = User::factory()->create(['role' => UserRole::Admin, 'branch_id' => null]);
 
@@ -733,14 +756,16 @@ class StockOpnameServicesTest extends TestCase
         $this->assertEquals(['BRANCH-ITEM'], ItemMasterResource::getEloquentQuery()->pluck('kode_barang')->all());
         $this->assertTrue(ItemMasterResource::canEdit($branchItem));
         $this->assertFalse(ItemMasterResource::canEdit($otherItem));
+        $this->assertEquals(['P020'], PrincipalResource::getEloquentQuery()->pluck('kode')->all());
 
         $this->actingAs($centralAdmin);
         $this->assertEqualsCanonicalizing(
-            ['BRANCH-ITEM', 'OTHER-ITEM'],
+            ['BRANCH-ITEM', 'OTHER-ITEM', 'OTHER-PRINCIPAL-ITEM'],
             ItemMasterResource::getEloquentQuery()->pluck('kode_barang')->all()
         );
         $this->assertTrue(ItemMasterResource::canEdit($branchItem));
         $this->assertTrue(ItemMasterResource::canEdit($otherItem));
+        $this->assertEqualsCanonicalizing(['P020', 'P021'], PrincipalResource::getEloquentQuery()->pluck('kode')->all());
     }
 
     /** @test */

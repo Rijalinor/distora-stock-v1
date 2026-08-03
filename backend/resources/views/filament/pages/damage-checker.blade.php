@@ -190,10 +190,26 @@
                             @foreach ($scanCandidates as $candidate)
                                 <button type="button" wire:click="chooseCandidate({{ $candidate['id'] }})" class="block w-full rounded-xl border border-warning-300 p-3 text-left hover:bg-warning-50 dark:border-warning-700 dark:hover:bg-warning-950/20">
                                     <div class="font-semibold">{{ $candidate['name'] }}</div>
-                                    <div class="text-sm text-gray-500">{{ $candidate['code'] }} · {{ $candidate['principal'] }}</div>
+                                    <div class="text-sm text-gray-500">{{ $candidate['code'] }} · {{ $candidate['principal'] }} · +{{ $candidate['qty_base'] }} PCS ({{ $candidate['unit'] }})</div>
                                 </button>
                             @endforeach
                         </div>
+                    @endif
+
+                    @if ($showPendingForm)
+                        <form wire:submit="createPendingItem" class="mt-4 space-y-3 rounded-xl border border-warning-300 bg-warning-50 p-4 dark:border-warning-800 dark:bg-warning-950/20">
+                            <div class="font-semibold">Barcode belum ada — tambah barang pending</div>
+                            <div class="text-xs text-gray-500">Setelah disimpan, barcode ini dapat langsung discan checker lain di cabang yang sama.</div>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div><label class="mb-1 block text-xs font-semibold">Barcode</label><x-filament::input wire:model="pendingBarcode" readonly /></div>
+                                <div><label class="mb-1 block text-xs font-semibold">Nama barang</label><x-filament::input wire:model="pendingItemName" /></div>
+                                <div><label class="mb-1 block text-xs font-semibold">Principal (opsional)</label><x-filament::input.wrapper><x-filament::input.select wire:model="pendingPrincipalId"><option value="">Belum diketahui</option>@foreach ($this->getPrincipals() as $principal)<option value="{{ $principal->id }}">{{ $principal->nama }}</option>@endforeach</x-filament::input.select></x-filament::input.wrapper></div>
+                                <div class="grid grid-cols-2 gap-2"><div><label class="mb-1 block text-xs font-semibold">Satuan</label><x-filament::input wire:model="pendingUnitLabel" /></div><div><label class="mb-1 block text-xs font-semibold">Isi (PCS)</label><x-filament::input type="number" min="1" wire:model="pendingQtyPerScan" /></div></div>
+                            </div>
+                            <div><label class="mb-1 block text-xs font-semibold">Catatan (opsional)</label><x-filament::input wire:model="pendingNotes" placeholder="Contoh: kemasan lama" /></div>
+                            @error('pendingItemName') <div class="text-sm text-danger-600">{{ $message }}</div> @enderror
+                            <div class="flex gap-2"><x-filament::button type="submit" icon="heroicon-m-plus">Tambah & Catat</x-filament::button><x-filament::button type="button" color="gray" wire:click="cancelPendingItem">Batal</x-filament::button></div>
+                        </form>
                     @endif
                 </x-filament::section>
             @endif
@@ -231,7 +247,7 @@
 
             <x-filament::section>
                 <x-slot name="heading">Barang Rusak Tercatat</x-slot>
-                <x-slot name="description">{{ $check->items_count }} jenis · {{ $check->items_sum_qty_rusak_base ?? 0 }} PCS</x-slot>
+                <x-slot name="description">{{ $check->items_count + $check->pending_items_count }} jenis · {{ ($check->items_sum_qty_rusak_base ?? 0) + ($check->pending_items_sum_qty_rusak_base ?? 0) }} PCS</x-slot>
 
                 @php($itemsData = $this->getItemsData())
 
@@ -277,6 +293,27 @@
                         <x-filament::button color="gray" class="w-full" wire:click="loadMoreItems">
                             Tampilkan 10 Lagi ({{ $itemsData['total'] - $itemsData['items']->count() }} tersisa)
                         </x-filament::button>
+                    </div>
+                @endif
+
+                @php($pendingRows = $this->getPendingItemsData())
+                @if ($pendingRows->isNotEmpty())
+                    <div class="mt-4 space-y-2">
+                        <div class="text-xs font-semibold uppercase text-warning-600">Barang Pending — menunggu pencocokan admin</div>
+                        @foreach ($pendingRows as $row)
+                            <div class="rounded-lg border border-warning-300 p-3 dark:border-warning-800">
+                                <div class="text-sm font-semibold">{{ $row->pendingItem->item_name }}</div>
+                                <div class="font-mono text-xs text-gray-500">{{ $row->pendingItem->barcode }} · {{ $row->pendingItem->temporary_code }}</div>
+                                <div class="mt-2 flex items-center justify-end gap-2 border-t pt-2 dark:border-gray-800">
+                                    @if ($check->status === \App\Enums\DamageCheckStatus::Open)<button type="button" wire:click="changePendingQuantity({{ $row->id }}, -1)" @disabled($row->qty_rusak_base <= 1) class="rounded-lg text-xl font-bold text-white disabled:opacity-40" style="width:44px;height:44px;background:#f59e0b">−</button>@endif
+                                    <div class="min-w-16 text-center font-bold">{{ $row->qty_rusak_display }}</div>
+                                    @if ($check->status === \App\Enums\DamageCheckStatus::Open)
+                                        <button type="button" wire:click="changePendingQuantity({{ $row->id }}, 1)" class="rounded-lg text-xl font-bold text-white" style="width:44px;height:44px;background:#16a34a">+</button>
+                                        <button type="button" x-on:click.prevent="if(confirm('Hapus item ini?')) $wire.deletePendingItem({{ $row->id }})" class="inline-flex items-center justify-center rounded-lg text-white" style="width:44px;height:44px;background:#dc2626"><x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" /></button>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
                     </div>
                 @endif
 

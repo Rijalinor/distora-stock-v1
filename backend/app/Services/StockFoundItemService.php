@@ -18,7 +18,8 @@ class StockFoundItemService
             ->where('branch_id', $session->branch_id)
             ->where(fn ($query) => $query
                 ->where('kode_barang', $code)
-                ->orWhere('barcode', $code))
+                ->orWhere('barcode', $code)
+                ->orWhereHas('barcodes', fn ($query) => $query->where('barcode', $code)))
             ->first();
     }
 

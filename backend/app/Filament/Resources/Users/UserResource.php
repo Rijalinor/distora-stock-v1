@@ -15,6 +15,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Model;
 
 class UserResource extends Resource
 {
@@ -33,6 +34,17 @@ class UserResource extends Resource
     public static function canViewAny(): bool
     {
         return Auth::user()?->isAdmin() ?? false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return Auth::user()?->isCentralAdmin()
+            || (Auth::user()?->isAdmin() && $record->isStockOfficer() && Auth::user()->managesBranch($record->branch_id));
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return static::canEdit($record) && (int) $record->id !== (int) Auth::id();
     }
 
     public static function form(Schema $schema): Schema
