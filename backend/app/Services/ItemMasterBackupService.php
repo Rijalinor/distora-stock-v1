@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ItemMaster;
 use App\Models\Branch;
 use App\Models\Principal;
+use App\Models\ItemBarcode;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +23,7 @@ class ItemMasterBackupService
             'principal_nama',
             'kode_barang',
             'barcode',
+            'barcodes_json',
             'nama_barang',
             'satuan',
             'qty_labels',
@@ -32,7 +34,7 @@ class ItemMasterBackupService
         ]);
 
         ItemMaster::query()
-            ->with(['branch', 'principal'])
+            ->with(['branch', 'principal', 'barcodes'])
             ->when($branchId, fn ($query) => $query->where('branch_id', $branchId))
             ->orderBy('branch_id')
             ->orderBy('kode_barang')
@@ -45,6 +47,7 @@ class ItemMasterBackupService
                         $item->principal?->nama ?? '',
                         $this->excelText($item->kode_barang),
                         $this->excelText($item->barcode),
+                        json_encode($item->barcodes->map->only(['barcode', 'unit_label', 'qty_base', 'is_primary'])->values(), JSON_UNESCAPED_SLASHES),
                         $item->nama_barang,
                         $item->satuan,
                         implode('-', $item->getQtyLabelsArray()),
@@ -191,6 +194,8 @@ class ItemMasterBackupService
                     'status' => ! in_array(strtolower(trim((string) ($row['status'] ?? 'active'))), ['0', 'false', 'inactive', 'nonaktif'], true),
                 ])->save();
 
+                $this->restoreBarcodes($item, $row);
+
                 $stats[$exists ? 'updated' : 'created']++;
             }
         });
@@ -253,6 +258,45 @@ class ItemMasterBackupService
             $labels,
             array_keys($labels)
         );
+    }
+
+    protected function restoreBarcodes(ItemMaster $item, array $row): void
+    {
+        if (array_key_exists('barcodes_json', $row)) {
+            $barcodes = json_decode((string) $row['barcodes_json'], true);
+
+            if (is_array($barcodes)) {
+                $item->barcodes()->delete();
+
+                foreach ($barcodes as $barcode) {
+                    if (blank($barcode['barcode'] ?? null)) {
+                        continue;
+                    }
+
+                    ItemBarcode::create([
+                        'item_master_id' => $item->id,
+                        'branch_id' => $item->branch_id,
+                        'barcode' => trim((string) $barcode['barcode']),
+                        'unit_label' => strtoupper(trim((string) ($barcode['unit_label'] ?? 'PCS'))),
+                        'qty_base' => max(1, (int) ($barcode['qty_base'] ?? 1)),
+                        'is_primary' => (bool) ($barcode['is_primary'] ?? false),
+                    ]);
+                }
+
+                return;
+            }
+        }
+
+        if (filled($item->barcode) && ! $item->barcodes()->where('barcode', $item->barcode)->exists()) {
+            ItemBarcode::create([
+                'item_master_id' => $item->id,
+                'branch_id' => $item->branch_id,
+                'barcode' => $item->barcode,
+                'unit_label' => 'PCS',
+                'qty_base' => 1,
+                'is_primary' => true,
+            ]);
+        }
     }
 
     protected function resolveBranch(array $row, ?int $branchId = null): Branch

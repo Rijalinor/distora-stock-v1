@@ -11,6 +11,7 @@ use App\Filament\Resources\Principals\PrincipalResource;
 use App\Models\Branch;
 use App\Models\CsvUpload;
 use App\Models\ItemMaster;
+use App\Models\ItemBarcode;
 use App\Models\Principal;
 use App\Models\StockFoundItem;
 use App\Models\StockSession;
@@ -309,7 +310,7 @@ class StockOpnameServicesTest extends TestCase
             'status' => true,
         ]);
 
-        ItemMaster::create([
+        $item = ItemMaster::create([
             'branch_id' => $branch->id,
             'kode_barang' => 'ITEM001',
             'barcode' => '8991234567890',
@@ -322,6 +323,14 @@ class StockOpnameServicesTest extends TestCase
             ],
             'status' => true,
         ]);
+        ItemBarcode::create([
+            'item_master_id' => $item->id, 'branch_id' => $branch->id,
+            'barcode' => '8991234567890', 'unit_label' => 'PCS', 'qty_base' => 1, 'is_primary' => true,
+        ]);
+        ItemBarcode::create([
+            'item_master_id' => $item->id, 'branch_id' => $branch->id,
+            'barcode' => '18991234567890', 'unit_label' => 'CTN', 'qty_base' => 12, 'is_primary' => false,
+        ]);
 
         $csv = app(ItemMasterBackupService::class)->buildCsv();
 
@@ -330,7 +339,18 @@ class StockOpnameServicesTest extends TestCase
         $this->assertStringContainsString('"=""ITEM001"""', $csv);
         $this->assertStringContainsString('CTN-PCS', $csv);
         $this->assertStringContainsString('qty_structure_json', $csv);
+        $this->assertStringContainsString('barcodes_json', $csv);
+        $this->assertStringContainsString('18991234567890', $csv);
         $this->assertStringContainsString('12', $csv);
+
+        $item->delete();
+        app(ItemMasterBackupService::class)->restoreCsv(UploadedFile::fake()->createWithContent('roundtrip.csv', $csv));
+        $restored = ItemMaster::where('kode_barang', 'ITEM001')->firstOrFail();
+        $this->assertEqualsCanonicalizing(
+            ['8991234567890', '18991234567890'],
+            $restored->barcodes()->pluck('barcode')->all()
+        );
+        $this->assertDatabaseHas('item_barcodes', ['item_master_id' => $restored->id, 'barcode' => '18991234567890', 'unit_label' => 'CTN', 'qty_base' => 12]);
     }
 
     /** @test */
@@ -366,6 +386,10 @@ class StockOpnameServicesTest extends TestCase
 
         $this->assertEquals(['CTN', 'PCS'], $item->getQtyLabelsArray());
         $this->assertEquals([24], $item->getQtyFactorsArray());
+        $this->assertDatabaseHas('item_barcodes', [
+            'item_master_id' => $item->id, 'barcode' => '8990002',
+            'unit_label' => 'PCS', 'qty_base' => 1, 'is_primary' => true,
+        ]);
 
         $previewAfterRestore = app(ItemMasterBackupService::class)->previewCsv($file);
         $this->assertEquals(0, $previewAfterRestore['created']);
