@@ -102,7 +102,15 @@
             </button>
         </div>
 
-        <div class="aspect-video w-full bg-black"><video x-ref="video" class="h-full w-full object-cover" playsinline muted></video></div>
+        <div class="relative aspect-video w-full overflow-hidden bg-black">
+            <video x-ref="video" class="h-full w-full object-cover" playsinline muted></video>
+
+            <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
+                <div class="h-24 w-4/5 max-w-md rounded-xl border-2 border-primary-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)] sm:h-32">
+                    <div class="relative top-1/2 mx-3 border-t border-primary-400/80"></div>
+                </div>
+            </div>
+        </div>
 
         <div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p class="text-sm text-gray-200" x-text="status"></p>

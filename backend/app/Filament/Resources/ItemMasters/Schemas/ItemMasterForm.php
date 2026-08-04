@@ -92,7 +92,7 @@ class ItemMasterForm
                             ->suffixAction(Action::make('scan')
                                 ->icon('heroicon-m-camera')
                                 ->tooltip('Scan dengan kamera')
-                                ->extraAttributes(['x-on:click' => '$dispatch(\'item-master-open-barcode-scanner\', { input: $el.closest(\'.fi-input-wrp\')?.querySelector(\'input\') })'])),
+                                ->alpineClickHandler('$dispatch(\'item-master-open-barcode-scanner\', { input: $el.closest(\'.fi-input-wrp\')?.querySelector(\'input\') })')),
                         Select::make('unit_label')
                             ->label('Kemasan')
                             ->options(['PCS' => 'PCS', 'PCK' => 'PCK', 'CTN' => 'CTN', 'DOZ' => 'DOZ'])
