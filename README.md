@@ -21,6 +21,7 @@ laporan.
 ### Master Data
 
 - Principal CRUD.
+- Principal dapat dinonaktifkan per cabang melalui status Item Master cabang.
 - Item Master CRUD.
 - User management untuk admin.
 - Backup dan restore Item Master.
@@ -49,6 +50,19 @@ laporan.
 - Panel Perbandingan memakai stock opname terakhir untuk principal dan cabang yang sama.
 - Qty aktual mendukung multi-level seperti `CTN-PCK-PCS`.
 - Progress sesi dihitung otomatis.
+- Mode pisah CTN/PCS untuk principal tertentu saat input, dengan laporan tetap memakai format standar.
+
+### Checker Barang Rusak
+
+- Header pemeriksaan barang rusak per tanggal, cabang, principal opsional, dan lokasi.
+- Multi-checker sampai 5 petugas dalam satu pemeriksaan memakai PIN bergabung.
+- Scan barcode via kamera atau input barcode.
+- Kamera mendukung scan cepat, tetap aktif setelah scan, dengan anti double-scan barcode yang sama.
+- Feedback scan sukses berupa teks inline, getar, dan bunyi pendek; notifikasi hanya untuk error/peringatan.
+- Barang pending untuk barcode yang belum ada di Item Master.
+- Tombol `+` untuk tambah 1 PCS dan `++` untuk tambah qty besar pada item tercatat maupun pending.
+- Daftar barang rusak default menampilkan 5 item terakhir agar halaman tetap ringan.
+- Laporan barang rusak dan export CSV tersedia untuk admin.
 
 ### Laporan
 
@@ -190,7 +204,32 @@ cd backend
 php artisan test
 ```
 
-Status terakhir: 23 test pass.
+Status terakhir: 48 test pass.
+
+## Production
+
+Status saat ini: production-ready.
+
+Konfigurasi production:
+
+- `APP_ENV=production`
+- `APP_DEBUG=false`
+- `DB_CONNECTION=mysql`
+- `SESSION_DRIVER=database`
+- `CACHE_STORE=database`
+- `QUEUE_CONNECTION=database`
+
+Perintah cache production:
+
+```bash
+cd backend
+php artisan optimize:clear
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan filament:optimize
+php artisan storage:link
+```
 
 ## Struktur Folder
 
@@ -230,6 +269,6 @@ distora-stock/
 ## Catatan Penting
 
 - Semua workflow utama berjalan melalui Filament panel.
-- Scan page hanya menampilkan sesi pada tanggal hari ini.
+- Halaman scan stock opname dan checker barang rusak dioptimalkan untuk pemakaian operasional gudang.
 - Jangan edit CSV backup di aplikasi yang mengubah format cell tanpa mengecek hasilnya.
 - Untuk barcode panjang, export CSV sudah dibuat Excel-safe, tapi tetap disarankan cek sample sebelum restore massal.

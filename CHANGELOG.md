@@ -2,6 +2,34 @@
 
 Semua perubahan signifikan pada proyek ini dicatat di sini.
 
+## [1.0.0] - 2026-08-08
+
+### Added
+
+- Mode pisah CTN/PCS per principal untuk input stock opname.
+- Penyimpanan internal `qty_aktual_ctn` dan `qty_aktual_pcs`.
+- Principal nonaktif per cabang melalui status Item Master cabang.
+- Checker Barang Rusak dengan multi-checker sampai 5 petugas.
+- PIN bergabung untuk sesi checker barang rusak.
+- Barang pending untuk barcode yang belum ada di Item Master.
+- Tombol `++` untuk tambah qty besar pada barang rusak tercatat dan pending.
+- Laporan dan export CSV barang rusak.
+
+### Changed
+
+- Laporan stock opname tetap memakai format standar meskipun mode pisah CTN/PCS aktif.
+- Checker Barang Rusak dioptimalkan untuk scan cepat.
+- Kamera checker tetap aktif setelah scan.
+- Scan sukses checker memakai feedback inline, getar, dan bunyi, bukan notifikasi bertumpuk.
+- Daftar barang rusak default hanya 5 item terakhir agar ringan.
+- Backend disiapkan untuk production: `APP_ENV=production`, cache config/routes/views/Filament, storage link aktif.
+
+### Fixed
+
+- Admin cabang dapat edit principal yang punya Item Master di cabangnya.
+- Anti double-scan kamera untuk barcode yang sama sampai barcode hilang dari frame.
+- Warning PHP `xmlrpc` pada XAMPP dinonaktifkan.
+
 ## [0.5.0] - 2026-07-27
 
 ### Added

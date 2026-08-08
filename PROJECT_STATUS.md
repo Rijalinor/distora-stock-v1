@@ -1,6 +1,6 @@
 # Project Status
 
-Terakhir diperbarui: 2026-07-27
+Terakhir diperbarui: 2026-08-08
 
 ## Ringkasan
 
@@ -10,7 +10,7 @@ opname harian:
 CSV upload -> sync master data -> generate sesi -> scan/input qty -> review
 selisih -> export laporan.
 
-Status saat ini: **operasional internal / alpha stabil**.
+Status saat ini: **production-ready**.
 
 ## Selesai
 
@@ -34,6 +34,7 @@ Status saat ini: **operasional internal / alpha stabil**.
 - [x] Indikator dan filter barcode duplikat.
 - [x] User management admin-only.
 - [x] Audit log.
+- [x] Principal nonaktif per cabang.
 
 ### Stock Opname
 
@@ -56,6 +57,21 @@ Status saat ini: **operasional internal / alpha stabil**.
 - [x] Progress sesi otomatis.
 - [x] Panel collapse untuk daftar kerja.
 - [x] Daftar item terurut berdasarkan kode A-Z.
+- [x] Mode pisah CTN/PCS untuk principal tertentu.
+- [x] Laporan tetap format standar meskipun mode pisah aktif.
+
+### Checker Barang Rusak
+
+- [x] Header pemeriksaan barang rusak.
+- [x] Multi-checker sampai 5 petugas dengan PIN.
+- [x] Scan barang rusak via kamera atau input barcode.
+- [x] Kamera scan cepat tetap aktif setelah scan.
+- [x] Anti double-scan barcode yang sama sampai barcode hilang dari frame.
+- [x] Feedback scan sukses inline, getar, dan bunyi.
+- [x] Barang pending untuk barcode belum dikenal.
+- [x] Tombol `+` dan `++` untuk item tercatat dan pending.
+- [x] Daftar barang rusak default 5 item terakhir.
+- [x] Laporan dan CSV barang rusak.
 
 ### Laporan
 
@@ -85,8 +101,11 @@ Status saat ini: **operasional internal / alpha stabil**.
 - [x] Qty teks Barang Temuan.
 - [x] Pencegahan Barang Temuan duplikat.
 - [x] Pemilihan tanggal opname pembanding terakhir.
+- [x] Multi-checker barang rusak.
+- [x] Bulk qty barang rusak dan pending.
+- [x] Mode pisah CTN/PCS.
 
-Status terakhir: 23 test pass.
+Status terakhir: 48 test pass.
 
 ## Belum Ada / Belum Prioritas
 
@@ -96,27 +115,20 @@ Status terakhir: 23 test pass.
 - API mobile dasar ada, tetapi workflow utama saat ini tetap Filament.
 - Belum ada build mobile production.
 
-### Deployment
-
-- Belum ada Dockerfile.
-- Belum ada CI/CD.
-- Belum ada deployment automation.
-
 ### Hardening
 
-- Validasi tambahan untuk edge case CSV besar.
-- Pembatasan complete session jika masih banyak pending, jika dibutuhkan operasional.
-- Audit lebih detail untuk restore massal.
-- Manual QA di perangkat gudang.
+- Backup database rutin.
+- Monitoring log production.
+- Validasi tambahan untuk edge case CSV sangat besar jika nanti dibutuhkan.
+- CI/CD belum ada, deploy masih manual.
 
 ## Backlog Prioritas
 
 | Prioritas | Item | Catatan |
 |---|---|---|
-| P1 | Manual QA end-to-end di PC gudang dan HP scanner | Pastikan kamera, tunnel, dan layout mobile nyaman |
-| P1 | Review complete session policy | Putuskan boleh tutup dengan pending atau harus blok |
-| P2 | Export pending items | Berguna untuk follow-up barang belum dicek |
-| P2 | Import validation report lebih detail | Tampilkan baris bermasalah dari CSV |
+| P1 | Backup database harian | Wajib untuk production |
+| P1 | Monitoring error log | Cek `storage/logs/laravel.log` |
+| P2 | Import validation report lebih detail | Tampilkan baris bermasalah dari CSV jika dibutuhkan |
 | P3 | CI test GitHub Actions | Jalankan `php artisan test` otomatis |
 | P3 | Docker/dev container | Untuk setup developer baru |
 
@@ -124,7 +136,7 @@ Status terakhir: 23 test pass.
 
 | Metrik | Nilai |
 |---|---|
-| Test cases | 23 |
+| Test cases | 48 |
 | Test pass rate | 100% pada run terakhir |
 | PHP | ^8.2 |
 | Laravel | ^12.0 |
