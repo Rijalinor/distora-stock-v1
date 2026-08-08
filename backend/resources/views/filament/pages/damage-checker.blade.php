@@ -106,10 +106,13 @@
                             stream: null,
                             detector: null,
                             scanning: false,
+                            scanMode: 'santai',
                             lastScanValue: null,
                             lastScanAt: 0,
-                            lockedBarcode: null,
                             status: 'Kamera belum aktif',
+                            cooldownMs() {
+                                return 2000;
+                            },
                             beep(frequency = 900, duration = 90) {
                                 const AudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -162,7 +165,6 @@
                                     const value = codes[0]?.rawValue?.trim();
 
                                     if (! value) {
-                                        this.lockedBarcode = null;
                                         requestAnimationFrame(() => this.scanFrame());
                                         return;
                                     }
@@ -170,18 +172,21 @@
                                     if (value) {
                                         const now = Date.now();
 
-                                        if (value === this.lockedBarcode || (value === this.lastScanValue && now - this.lastScanAt < 1000)) {
+                                        if (value === this.lastScanValue && now - this.lastScanAt < this.cooldownMs()) {
                                             requestAnimationFrame(() => this.scanFrame());
                                             return;
                                         }
 
                                         this.lastScanValue = value;
                                         this.lastScanAt = now;
-                                        this.lockedBarcode = value;
                                         this.status = `Terbaca: ${value}`;
                                         navigator.vibrate?.(60);
                                         this.beep();
                                         $wire.scanBarcode(value);
+                                        if (this.scanMode === 'santai') {
+                                            this.stopCamera();
+                                            return;
+                                        }
                                     }
                                 } catch (error) {
                                     this.status = 'Tidak bisa membaca barcode';
@@ -209,6 +214,15 @@
                         <div class="h-5 truncate text-center text-sm text-gray-500" x-text="status"></div>
 
                         <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 text-sm font-semibold dark:bg-gray-800">
+                                <button type="button" x-on:click="scanMode = 'santai'" class="rounded-lg px-3 py-2" x-bind:class="scanMode === 'santai' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-300'">
+                                    Santai
+                                </button>
+                                <button type="button" x-on:click="scanMode = 'cepat'; if (! scanning) toggleCamera()" class="rounded-lg px-3 py-2" x-bind:class="scanMode === 'cepat' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-300'">
+                                    Cepat
+                                </button>
+                            </div>
+
                             <x-filament::button type="button" size="lg" icon="heroicon-m-camera" x-on:click="toggleCamera()" class="w-full">
                                 <span x-text="scanning ? 'Matikan Kamera' : 'Buka Kamera'"></span>
                             </x-filament::button>
