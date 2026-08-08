@@ -1042,8 +1042,13 @@
 
                         <div>
                             <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                                Qty Aktual
+                                {{ $this->usesSeparateCtnPcsCount() ? 'Qty Aktual Terpisah' : 'Qty Aktual' }}
                             </label>
+                            @if ($this->usesSeparateCtnPcsCount())
+                                <div class="mb-2 text-sm text-gray-500">
+                                    Isi CTN sesuai stok area karton dan PCS sesuai stok area eceran.
+                                </div>
+                            @endif
                             <div class="grid gap-2 sm:gap-4" style="grid-template-columns: repeat({{ count($qtyLabels) }}, minmax(0, 1fr))">
                                 @foreach ($qtyLabels as $index => $label)
                                     <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">

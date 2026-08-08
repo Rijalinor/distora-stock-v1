@@ -88,6 +88,102 @@ class StockOpnameServicesTest extends TestCase
     }
 
     /** @test */
+    public function it_stores_ctn_and_pcs_actual_counts_separately_for_enabled_principals()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'SEP',
+            'nama' => 'Principal Separate',
+            'separate_ctn_pcs_count' => true,
+            'status' => true,
+        ]);
+        $officer = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
+        $itemMaster = ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'SEP-001',
+            'nama_barang' => 'Barang Separate (1X24)',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCS',
+            'qty_structure' => [
+                ['label' => 'CTN', 'factor' => 24],
+                ['label' => 'PCS', 'factor' => 1],
+            ],
+            'status' => true,
+        ]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::InProgress,
+            'total_items' => 1,
+        ]);
+        $item = StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'item_master_id' => $itemMaster->id,
+            'kode_barang' => 'SEP-001',
+            'nama_barang' => 'Barang Separate (1X24)',
+            'satuan' => 'CTN-PCS',
+            'qty_sistem_display' => '16 CTN 5 PCS',
+            'qty_sistem_base' => 389,
+            'status' => StockSessionItemStatus::Pending,
+        ]);
+
+        app(StockScanningService::class)->recordStock($item, [16, 5], $officer);
+
+        $item = $item->fresh();
+        $this->assertSame(16, $item->qty_aktual_ctn);
+        $this->assertSame(5, $item->qty_aktual_pcs);
+        $this->assertSame(389, $item->qty_aktual_base);
+        $this->assertSame('16 CTN 5 PCS', $item->qty_aktual_display);
+    }
+
+    /** @test */
+    public function inactive_branch_principal_items_are_hidden_from_scan_sessions()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'SCAN-OFF',
+            'nama' => 'Principal Scan Off',
+            'status' => true,
+        ]);
+        $itemMaster = ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'SCAN-OFF-001',
+            'nama_barang' => 'Barang Scan Off',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::Open,
+            'total_items' => 1,
+        ]);
+        StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'item_master_id' => $itemMaster->id,
+            'kode_barang' => 'SCAN-OFF-001',
+            'nama_barang' => 'Barang Scan Off',
+            'satuan' => 'PCS',
+            'qty_sistem_display' => '1 PCS',
+            'qty_sistem_base' => 1,
+            'status' => StockSessionItemStatus::Pending,
+        ]);
+        $admin = User::factory()->create(['role' => UserRole::Admin, 'branch_id' => $branch->id]);
+
+        $this->actingAs($admin);
+        $page = new \App\Filament\Pages\StockScanning();
+        $this->assertSame([$session->id], $page->getAvailableSessions()->pluck('id')->all());
+
+        $itemMaster->update(['status' => false]);
+
+        $this->assertSame([], $page->getAvailableSessions()->pluck('id')->all());
+        $this->assertTrue($principal->fresh()->status);
+    }
+
+    /** @test */
     public function it_can_sync_database_and_generate_sessions_from_parsed_csv_data()
     {
         $admin = User::factory()->create(['role' => UserRole::Admin]);
@@ -780,6 +876,8 @@ class StockOpnameServicesTest extends TestCase
         $this->assertEquals(['BRANCH-ITEM'], ItemMasterResource::getEloquentQuery()->pluck('kode_barang')->all());
         $this->assertTrue(ItemMasterResource::canEdit($branchItem));
         $this->assertFalse(ItemMasterResource::canEdit($otherItem));
+        $this->assertTrue(PrincipalResource::canEdit($principal));
+        $this->assertFalse(PrincipalResource::canEdit($otherPrincipal));
         $this->assertEquals(['P020'], PrincipalResource::getEloquentQuery()->pluck('kode')->all());
 
         $this->actingAs($centralAdmin);
@@ -789,6 +887,8 @@ class StockOpnameServicesTest extends TestCase
         );
         $this->assertTrue(ItemMasterResource::canEdit($branchItem));
         $this->assertTrue(ItemMasterResource::canEdit($otherItem));
+        $this->assertTrue(PrincipalResource::canEdit($principal));
+        $this->assertTrue(PrincipalResource::canEdit($otherPrincipal));
         $this->assertEqualsCanonicalizing(['P020', 'P021'], PrincipalResource::getEloquentQuery()->pluck('kode')->all());
     }
 

@@ -267,6 +267,73 @@ class DamageCheckTest extends TestCase
         $this->assertStringContainsString('Barang Sangat Lama [PENDING]', $report->buildCsv($owner, $filters));
     }
 
+    #[Test]
+    public function checker_can_add_bulk_quantity_to_recorded_item(): void
+    {
+        [$officer, $item] = $this->makeOfficerAndItem();
+        $service = app(DamageCheckService::class);
+        $check = $service->create([
+            'check_date' => today()->toDateString(),
+            'branch_id' => $officer->branch_id,
+            'principal_id' => null,
+            'location' => 'Gudang Manual',
+            'notes' => null,
+            'join_pin' => '1234',
+        ], $officer);
+        $service->scan($check, $item, $officer);
+
+        $this->actingAs($officer);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\DamageChecker::class)
+            ->call('selectCheck', $check->id)
+            ->set('bulkQty.' . $check->items()->firstOrFail()->id, 12)
+            ->call('addBulkQuantity', $check->items()->firstOrFail()->id);
+
+        $this->assertDatabaseHas('damage_check_items', [
+            'damage_check_id' => $check->id,
+            'item_master_id' => $item->id,
+            'qty_rusak_base' => 13,
+            'qty_rusak_display' => '13 PCS',
+        ]);
+    }
+
+    #[Test]
+    public function checker_can_add_bulk_quantity_to_pending_item(): void
+    {
+        [$officer] = $this->makeOfficerAndItem();
+        $service = app(DamageCheckService::class);
+        $check = $service->create([
+            'check_date' => today()->toDateString(),
+            'branch_id' => $officer->branch_id,
+            'principal_id' => null,
+            'location' => 'Gudang Pending Bulk',
+            'notes' => null,
+            'join_pin' => '1234',
+        ], $officer);
+        $row = $service->createAndScanPending($check, [
+            'barcode' => 'PENDING-BULK-01',
+            'item_name' => 'Barang Pending Bulk',
+            'principal_id' => null,
+            'unit_label' => 'PCS',
+            'qty_per_scan' => 1,
+            'notes' => null,
+        ], $officer);
+
+        $this->actingAs($officer);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\DamageChecker::class)
+            ->call('selectCheck', $check->id)
+            ->set('bulkQty.pending-' . $row->id, 30)
+            ->call('addBulkPendingQuantity', $row->id);
+
+        $this->assertDatabaseHas('damage_check_pending_items', [
+            'damage_check_id' => $check->id,
+            'pending_item_id' => $row->pending_item_id,
+            'qty_rusak_base' => 31,
+            'qty_rusak_display' => '31 PCS',
+        ]);
+    }
+
     private function makeOfficerAndItem(): array
     {
         $branch = Branch::where('kode', 'PUSAT')->firstOrFail();

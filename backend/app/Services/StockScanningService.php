@@ -235,6 +235,7 @@ class StockScanningService
             $item->update([
                 'qty_aktual_base' => $qtyBase,
                 'qty_aktual_display' => $qtyDisplay,
+                ...$this->separateActualQtyPayload($item, $qtyLevels),
                 'selisih' => $selisih,
                 'status' => $status,
                 'checked_by' => $officer->id,
@@ -264,9 +265,12 @@ class StockScanningService
     public function markAsMatched(StockSessionItem $item, User $officer): void
     {
         DB::transaction(function () use ($item, $officer) {
+            $qtyLevels = self::splitBaseQuantity($item->qty_sistem_base, $this->resolveQtyFactors($item));
+
             $item->update([
                 'qty_aktual_base' => $item->qty_sistem_base,
                 'qty_aktual_display' => $item->qty_sistem_display,
+                ...$this->separateActualQtyPayload($item, $qtyLevels),
                 'selisih' => 0,
                 'status' => StockSessionItemStatus::Matched,
                 'checked_by' => $officer->id,
@@ -295,6 +299,7 @@ class StockScanningService
             $item->update([
                 'qty_aktual_base' => 0,
                 'qty_aktual_display' => self::buildQtyDisplayFromLabels([], $labels),
+                ...$this->separateActualQtyPayload($item, []),
                 'selisih' => $selisih,
                 'status' => StockSessionItemStatus::Missing,
                 'checked_by' => $officer->id,
@@ -357,6 +362,7 @@ class StockScanningService
             $item->update([
                 'qty_aktual_base' => $qtyAfterBase,
                 'qty_aktual_display' => $qtyAfterDisplay,
+                ...$this->separateActualQtyPayload($item, $newQtyLevels),
                 'selisih' => $selisih,
                 'status' => $status,
                 'checked_by' => $officer->id,
@@ -535,5 +541,27 @@ class StockScanningService
         }
 
         return self::parseConversionFactors($item->nama_barang);
+    }
+
+    /**
+     * @param int[] $qtyLevels
+     * @return array{qty_aktual_ctn: int|null, qty_aktual_pcs: int|null}
+     */
+    protected function separateActualQtyPayload(StockSessionItem $item, array $qtyLevels): array
+    {
+        if (! $item->stockSession?->principal?->separate_ctn_pcs_count) {
+            return [
+                'qty_aktual_ctn' => null,
+                'qty_aktual_pcs' => null,
+            ];
+        }
+
+        $labels = $this->resolveQtyLabels($item);
+        $lastIndex = max(0, count($labels) - 1);
+
+        return [
+            'qty_aktual_ctn' => max(0, (int) ($qtyLevels[0] ?? 0)),
+            'qty_aktual_pcs' => max(0, (int) ($qtyLevels[$lastIndex] ?? 0)),
+        ];
     }
 }

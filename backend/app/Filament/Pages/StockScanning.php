@@ -120,7 +120,11 @@ class StockScanning extends Page
         $user = Auth::user();
 
         if ($user && ! $user->isCentralAdmin() && $user->branch_id) {
-            $query->where('branch_id', $user->branch_id);
+            $query
+                ->where('branch_id', $user->branch_id)
+                ->whereHas('items.itemMaster', fn ($query) => $query
+                    ->where('branch_id', $user->branch_id)
+                    ->where('status', true));
         }
 
         return $query
@@ -676,6 +680,11 @@ class StockScanning extends Page
     public function formatSystemQty(StockSessionItem $item): string
     {
         return app(ReportService::class)->formatBaseQty($item->qty_sistem_base, $item);
+    }
+
+    public function usesSeparateCtnPcsCount(): bool
+    {
+        return (bool) $this->scannedItem?->stockSession?->principal?->separate_ctn_pcs_count;
     }
 
     public function getComparisonDateForSession(StockSession $session): ?string

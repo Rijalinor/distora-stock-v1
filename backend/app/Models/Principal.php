@@ -11,8 +11,17 @@ class Principal extends Model
         'kode',
         'nama',
         'group_principal_id',
+        'separate_ctn_pcs_count',
         'status',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'separate_ctn_pcs_count' => 'bool',
+            'status' => 'bool',
+        ];
+    }
 
     public function itemMasters()
     {

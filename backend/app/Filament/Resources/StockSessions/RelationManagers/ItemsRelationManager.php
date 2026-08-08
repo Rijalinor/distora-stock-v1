@@ -36,6 +36,16 @@ class ItemsRelationManager extends RelationManager
                     ->label('Qty Aktual')
                     ->placeholder('-'),
 
+                TextColumn::make('qty_aktual_ctn')
+                    ->label('Aktual CTN')
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('qty_aktual_pcs')
+                    ->label('Aktual PCS')
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('selisih')
                     ->label('Selisih')
                     ->formatStateUsing(fn ($state, StockSessionItem $record) => app(ReportService::class)->formatBaseQty($state, $record))

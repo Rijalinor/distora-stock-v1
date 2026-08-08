@@ -40,6 +40,11 @@ class PrincipalForm
                 Toggle::make('status')
                     ->default(true),
 
+                Toggle::make('separate_ctn_pcs_count')
+                    ->label('Hitung CTN dan PCS Terpisah')
+                    ->helperText('Aktifkan untuk principal yang fisik CTN dan PCS-nya dipisah tempat.')
+                    ->default(false),
+
             ]);
     }
 }

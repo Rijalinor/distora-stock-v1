@@ -34,7 +34,10 @@ class PrincipalResource extends Resource
 
     public static function canEdit(Model $record): bool
     {
-        return Auth::user()?->isCentralAdmin() ?? false;
+        $user = Auth::user();
+
+        return $user?->isAdmin()
+            && ($user->isCentralAdmin() || $record->itemMasters()->where('branch_id', $user->branch_id)->exists());
     }
 
     public static function canCreate(): bool { return Auth::user()?->isCentralAdmin() ?? false; }

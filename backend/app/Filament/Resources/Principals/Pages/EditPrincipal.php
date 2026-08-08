@@ -7,6 +7,7 @@ use App\Services\AuditLogService;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 
 class EditPrincipal extends EditRecord
 {
@@ -23,6 +24,7 @@ class EditPrincipal extends EditRecord
                         'kode',
                         'nama',
                         'group_principal_id',
+                        'separate_ctn_pcs_count',
                         'status',
                     ]),
                     [],
@@ -30,14 +32,39 @@ class EditPrincipal extends EditRecord
         ];
     }
 
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $user = Auth::user();
+
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id) {
+            $data['status'] = $this->record
+                ->itemMasters()
+                ->where('branch_id', $user->branch_id)
+                ->where('status', true)
+                ->exists();
+        }
+
+        return $data;
+    }
+
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
+        $user = Auth::user();
         $before = $record->only([
             'kode',
             'nama',
             'group_principal_id',
+            'separate_ctn_pcs_count',
             'status',
         ]);
+
+        if ($user && ! $user->isCentralAdmin() && $user->branch_id && array_key_exists('status', $data)) {
+            $record->itemMasters()
+                ->where('branch_id', $user->branch_id)
+                ->update(['status' => (bool) $data['status']]);
+
+            unset($data['status']);
+        }
 
         $record = parent::handleRecordUpdate($record, $data);
 

@@ -17,6 +17,8 @@ class StockSessionItem extends Model
         'qty_sistem_base',
         'qty_aktual_display',
         'qty_aktual_base',
+        'qty_aktual_ctn',
+        'qty_aktual_pcs',
         'selisih',
         'status',
         'checked_by',

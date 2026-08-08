@@ -27,6 +27,8 @@ class DamageChecker extends Page
     protected static ?int $navigationSort = 3;
     protected string $view = 'filament.pages.damage-checker';
 
+    protected ?DamageCheck $selectedCheckCache = null;
+
     public ?int $selectedCheckId = null;
     public string $checkDate = '';
     public ?int $branchId = null;
@@ -39,7 +41,11 @@ class DamageChecker extends Page
     public string $legacyJoinPin = '';
     public string $barcode = '';
     public string $itemSearch = '';
-    public int $itemsLimit = 10;
+    public string $manualSearch = '';
+    public int $manualQty = 1;
+    /** @var array<int, int|string> */
+    public array $bulkQty = [];
+    public int $itemsLimit = 5;
     public bool $showPendingForm = false;
     public string $pendingBarcode = '';
     public string $pendingItemName = '';
@@ -47,6 +53,7 @@ class DamageChecker extends Page
     public string $pendingUnitLabel = 'PCS';
     public int $pendingQtyPerScan = 1;
     public string $pendingNotes = '';
+    public string $scanFeedback = '';
 
     /** @var array<int, array{id:int, code:string, name:string, principal:string, qty_base:int, unit:string}> */
     public array $scanCandidates = [];
@@ -162,21 +169,24 @@ class DamageChecker extends Page
 
     private function openCheck(DamageCheck $check): void
     {
+        $this->forgetSelectedCheckCache();
         $this->selectedCheckId = $check->id;
         session()->put(self::SESSION_KEY, $check->id);
         $this->reset(['barcode', 'scanCandidates']);
-        $this->reset(['itemSearch']);
-        $this->itemsLimit = 10;
+        $this->reset(['itemSearch', 'bulkQty']);
+        $this->itemsLimit = 5;
         $this->dispatch('damage-scan-ready');
     }
 
     public function backToList(): void
     {
+        $this->forgetSelectedCheckCache();
         $this->selectedCheckId = null;
         session()->forget(self::SESSION_KEY);
         $this->reset(['barcode', 'scanCandidates']);
-        $this->reset(['itemSearch']);
-        $this->itemsLimit = 10;
+        $this->reset(['itemSearch', 'bulkQty']);
+        $this->scanFeedback = '';
+        $this->itemsLimit = 5;
     }
 
     public function leaveCheck(): void
@@ -210,7 +220,8 @@ class DamageChecker extends Page
             if ($pending) {
                 $row = app(DamageCheckService::class)->scanPending($check, $pending, Auth::user());
                 $this->barcode = '';
-                Notification::make()->title('Barang pending berhasil discan')->body("{$pending->item_name} — total {$row->qty_rusak_display}")->success()->send();
+                $this->scanFeedback = "{$pending->item_name} - total {$row->qty_rusak_display}";
+                $this->forgetSelectedCheckCache();
                 $this->dispatch('damage-scan-success');
                 return;
             }
@@ -256,6 +267,7 @@ class DamageChecker extends Page
             'qty_per_scan' => $data['pendingQtyPerScan'], 'notes' => $data['pendingNotes'],
         ], Auth::user());
         $this->cancelPendingItem();
+        $this->forgetSelectedCheckCache();
         Notification::make()->title('Barang pending ditambahkan')->body("Langsung tercatat {$row->qty_rusak_display} dan dapat discan checker lain.")->success()->send();
     }
 
@@ -270,11 +282,23 @@ class DamageChecker extends Page
     {
         $item = $this->selectedPendingItem($itemId);
         app(DamageCheckService::class)->updatePendingQuantity($item, $item->qty_rusak_base + $change);
+        $this->forgetSelectedCheckCache();
+    }
+
+    public function addBulkPendingQuantity(int $itemId): void
+    {
+        $quantity = max(1, (int) ($this->bulkQty['pending-' . $itemId] ?? 1));
+        $item = $this->selectedPendingItem($itemId);
+
+        app(DamageCheckService::class)->updatePendingQuantity($item, $item->qty_rusak_base + $quantity);
+        $this->bulkQty['pending-' . $itemId] = 1;
+        $this->forgetSelectedCheckCache();
     }
 
     public function deletePendingItem(int $itemId): void
     {
         app(DamageCheckService::class)->deletePendingItem($this->selectedPendingItem($itemId));
+        $this->forgetSelectedCheckCache();
     }
 
     public function chooseCandidate(int $itemId): void
@@ -292,14 +316,32 @@ class DamageChecker extends Page
     {
         $item = $this->selectedItem($itemId);
         app(DamageCheckService::class)->updateQuantity($item, $item->qty_rusak_base + $change);
+        $this->forgetSelectedCheckCache();
+        $this->dispatch('damage-scan-ready');
+    }
+
+    public function addBulkQuantity(int $itemId): void
+    {
+        $quantity = max(1, (int) ($this->bulkQty[$itemId] ?? 1));
+        $item = $this->selectedItem($itemId);
+
+        app(DamageCheckService::class)->updateQuantity($item, $item->qty_rusak_base + $quantity);
+        $this->bulkQty[$itemId] = 1;
+        $this->forgetSelectedCheckCache();
         $this->dispatch('damage-scan-ready');
     }
 
     public function deleteItem(int $itemId): void
     {
         app(DamageCheckService::class)->deleteItem($this->selectedItem($itemId));
+        $this->forgetSelectedCheckCache();
         Notification::make()->title('Salah scan dihapus')->success()->send();
         $this->dispatch('damage-scan-ready');
+    }
+
+    public function addManualItem(int $itemId): void
+    {
+        $this->addBulkQuantity($itemId);
     }
 
     public function completeCheck(): void
@@ -312,6 +354,7 @@ class DamageChecker extends Page
 
         try {
             app(DamageCheckService::class)->complete($check, Auth::user());
+            $this->forgetSelectedCheckCache();
             Notification::make()->title('Pemeriksaan selesai')->success()->send();
             $this->backToList();
         } catch (\RuntimeException $e) {
@@ -325,7 +368,11 @@ class DamageChecker extends Page
             return null;
         }
 
-        return $this->accessibleChecks()
+        if ($this->selectedCheckCache?->id === $this->selectedCheckId) {
+            return $this->selectedCheckCache;
+        }
+
+        return $this->selectedCheckCache = $this->accessibleChecks()
             ->with(['branch', 'principal', 'officer', 'checkers'])
             ->withCount(['items', 'checkers'])
             ->withSum('items', 'qty_rusak_base')
@@ -336,7 +383,7 @@ class DamageChecker extends Page
 
     public function getItemsData(): array
     {
-        if (! $this->getSelectedCheck()) {
+        if (! $this->selectedCheckId) {
             return ['items' => collect(), 'total' => 0];
         }
 
@@ -366,14 +413,19 @@ class DamageChecker extends Page
             ->orderByDesc('last_scanned_at')->get();
     }
 
+    public function getManualItemCandidates()
+    {
+        return collect();
+    }
+
     public function loadMoreItems(): void
     {
-        $this->itemsLimit += 10;
+        $this->itemsLimit += 5;
     }
 
     public function updatedItemSearch(): void
     {
-        $this->itemsLimit = 10;
+        $this->itemsLimit = 5;
     }
 
     public function getRecentChecks()
@@ -419,13 +471,14 @@ class DamageChecker extends Page
         $scanQtyBase ??= (int) ($item->scan_qty_base ?? 1);
         $row = app(DamageCheckService::class)->scan($this->getSelectedCheck(), $item, Auth::user(), $scanQtyBase);
         $this->reset(['barcode', 'scanCandidates']);
-        Notification::make()
-            ->title('Scan berhasil')
-            ->body("{$row->itemMaster->nama_barang} — total {$row->qty_rusak_display}")
-            ->success()
-            ->duration(1800)
-            ->send();
+        $this->scanFeedback = "{$row->itemMaster->nama_barang} - total {$row->qty_rusak_display}";
+        $this->forgetSelectedCheckCache();
         $this->dispatch('damage-scan-success');
+    }
+
+    protected function forgetSelectedCheckCache(): void
+    {
+        $this->selectedCheckCache = null;
     }
 
     private function selectedItem(int $itemId): DamageCheckItem
@@ -452,3 +505,5 @@ class DamageChecker extends Page
                 ->orWhereHas('checkers', fn ($query) => $query->whereKey($user->id))));
     }
 }
+
+
