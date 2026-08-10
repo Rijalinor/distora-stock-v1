@@ -48,6 +48,8 @@ class StockScanning extends Page
     /** @var array<int, int|string> */
     public array $qtyLevels = [];
 
+    public string $separateCountMode = 'ctn';
+
     public string $editReason = '';
 
     public bool $isEditing = false;
@@ -319,6 +321,24 @@ class StockScanning extends Page
             ->send();
 
         $this->resetScanState();
+    }
+
+    public function markCurrentModeMatched(): void
+    {
+        if (! $this->ensureScannedItemAccess() || ! $this->scannedItem) {
+            return;
+        }
+
+        $systemLevels = StockScanningService::splitBaseQuantity(
+            $this->scannedItem->qty_sistem_base,
+            $this->getQtyFactorsForItem($this->scannedItem)
+        );
+
+        foreach ($this->getSeparateCountModeIndexes() as $index) {
+            $this->qtyLevels[$index] = $systemLevels[$index] ?? 0;
+        }
+
+        $this->submitActualQty();
     }
 
     public function markMissing(): void
@@ -687,6 +707,54 @@ class StockScanning extends Page
         return (bool) $this->scannedItem?->stockSession?->principal?->separate_ctn_pcs_count;
     }
 
+    public function setSeparateCountMode(string $mode): void
+    {
+        if (in_array($mode, ['ctn', 'pcs'], true)) {
+            $this->separateCountMode = $mode;
+        }
+    }
+
+    public function getSeparateCountModeIndex(): int
+    {
+        return $this->getSeparateCountModeIndexes()[0] ?? 0;
+    }
+
+    /**
+     * @return int[]
+     */
+    public function getSeparateCountModeIndexes(): array
+    {
+        if (! $this->scannedItem || $this->separateCountMode === 'ctn') {
+            return [0];
+        }
+
+        $lastIndex = max(0, count($this->getQtyLabelsForItem($this->scannedItem)) - 1);
+
+        return range(1, $lastIndex);
+    }
+
+    public function getActiveModeSystemQty(): string
+    {
+        if (! $this->scannedItem) {
+            return '0';
+        }
+
+        $levels = StockScanningService::splitBaseQuantity(
+            $this->scannedItem->qty_sistem_base,
+            $this->getQtyFactorsForItem($this->scannedItem)
+        );
+        $labels = $this->getQtyLabelsForItem($this->scannedItem);
+
+        if ($this->separateCountMode === 'ctn') {
+            return (int) ($levels[0] ?? 0) . ' ' . ($labels[0] ?? 'CTN');
+        }
+
+        return StockScanningService::buildQtyDisplayFromLabels(
+            array_intersect_key($levels, array_flip($this->getSeparateCountModeIndexes())),
+            $labels
+        );
+    }
+
     public function getComparisonDateForSession(StockSession $session): ?string
     {
         return app(ReportService::class)->findPreviousStockDate(
@@ -719,6 +787,8 @@ class StockScanning extends Page
 
         if ($item->qty_aktual_base !== null) {
             $this->qtyLevels = StockScanningService::splitBaseQuantity($item->qty_aktual_base, $factors);
+        } elseif ($item->stockSession?->principal?->separate_ctn_pcs_count) {
+            $this->qtyLevels = array_fill(0, $levelsCount, 0);
         } else {
             $this->qtyLevels = StockScanningService::splitBaseQuantity($item->qty_sistem_base, $factors);
         }

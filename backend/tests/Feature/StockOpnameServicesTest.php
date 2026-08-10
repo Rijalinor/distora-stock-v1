@@ -138,6 +138,78 @@ class StockOpnameServicesTest extends TestCase
     }
 
     /** @test */
+    public function separate_count_mode_can_mark_ctn_and_pcs_one_at_a_time()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'SEP-MODE',
+            'nama' => 'Principal Separate Mode',
+            'separate_ctn_pcs_count' => true,
+            'status' => true,
+        ]);
+        $officer = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
+        $itemMaster = ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'SEP-MODE-001',
+            'barcode' => '899SEPMODE',
+            'nama_barang' => 'Barang Separate Mode (1X12X24)',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCK-PCS',
+            'qty_structure' => [
+                ['label' => 'CTN', 'factor' => 12],
+                ['label' => 'PCK', 'factor' => 24],
+                ['label' => 'PCS', 'factor' => 1],
+            ],
+            'status' => true,
+        ]);
+        $session = StockSession::create([
+            'principal_id' => $principal->id,
+            'branch_id' => $branch->id,
+            'session_date' => today(),
+            'status' => StockSessionStatus::InProgress,
+            'total_items' => 1,
+        ]);
+        $item = StockSessionItem::create([
+            'stock_session_id' => $session->id,
+            'item_master_id' => $itemMaster->id,
+            'kode_barang' => 'SEP-MODE-001',
+            'barcode' => '899SEPMODE',
+            'nama_barang' => 'Barang Separate Mode (1X12X24)',
+            'satuan' => 'CTN-PCK-PCS',
+            'qty_sistem_display' => '1 CTN 1 PCK 1 PCS',
+            'qty_sistem_base' => 313,
+            'status' => StockSessionItemStatus::Pending,
+        ]);
+
+        $this->actingAs($officer);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\StockScanning::class)
+            ->set('selectedSessionId', $session->id)
+            ->set('separateCountMode', 'ctn')
+            ->call('scanBarcode', '899SEPMODE', true)
+            ->call('markCurrentModeMatched');
+
+        $item = $item->fresh();
+        $this->assertSame(1, $item->qty_aktual_ctn);
+        $this->assertSame(0, $item->qty_aktual_pcs);
+        $this->assertSame('1 CTN', $item->qty_aktual_display);
+        $this->assertEquals(StockSessionItemStatus::Mismatched, $item->status);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\StockScanning::class)
+            ->set('selectedSessionId', $session->id)
+            ->set('separateCountMode', 'pcs')
+            ->call('scanBarcode', '899SEPMODE', true)
+            ->call('markCurrentModeMatched');
+
+        $item = $item->fresh();
+        $this->assertSame(1, $item->qty_aktual_ctn);
+        $this->assertSame(1, $item->qty_aktual_pcs);
+        $this->assertSame(313, $item->qty_aktual_base);
+        $this->assertSame('1 CTN 1 PCK 1 PCS', $item->qty_aktual_display);
+        $this->assertEquals(StockSessionItemStatus::Matched, $item->status);
+    }
+
+    /** @test */
     public function inactive_branch_principal_items_are_hidden_from_scan_sessions()
     {
         $branch = Branch::where('kode', 'PUSAT')->firstOrFail();

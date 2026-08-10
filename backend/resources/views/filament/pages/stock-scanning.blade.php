@@ -149,6 +149,25 @@
                     <span class="text-base sm:text-lg">Arahkan scanner atau cari kode/nama barang manual.</span>
                 </x-slot>
 
+                @if ($session->principal?->separate_ctn_pcs_count)
+                    <div class="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 text-sm font-semibold dark:bg-gray-800">
+                        <button type="button" wire:click="setSeparateCountMode('ctn')" @class([
+                            'rounded-lg px-3 py-2',
+                            'bg-primary-600 text-white' => $separateCountMode === 'ctn',
+                            'text-gray-600 dark:text-gray-300' => $separateCountMode !== 'ctn',
+                        ])>
+                            Mode CTN
+                        </button>
+                        <button type="button" wire:click="setSeparateCountMode('pcs')" @class([
+                            'rounded-lg px-3 py-2',
+                            'bg-primary-600 text-white' => $separateCountMode === 'pcs',
+                            'text-gray-600 dark:text-gray-300' => $separateCountMode !== 'pcs',
+                        ])>
+                            Mode PCS
+                        </button>
+                    </div>
+                @endif
+
                 <div
                     x-data="{
                         stream: null,
@@ -1035,35 +1054,53 @@
                             <x-filament::callout color="info" icon="heroicon-m-pencil-square">
                                 <x-slot name="heading">Mode Edit</x-slot>
                                 <x-slot name="description">
-                                    Stok Sistem: {{ $this->formatSystemQty($scannedItem) }}
+                                    Stok Sistem: {{ $this->usesSeparateCtnPcsCount() ? $this->getActiveModeSystemQty() : $this->formatSystemQty($scannedItem) }}
                                 </x-slot>
                             </x-filament::callout>
                         @endif
 
                         <div>
                             <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                                {{ $this->usesSeparateCtnPcsCount() ? 'Qty Aktual Terpisah' : 'Qty Aktual' }}
+                                {{ $this->usesSeparateCtnPcsCount() ? 'Qty Aktual ' . strtoupper($separateCountMode) : 'Qty Aktual' }}
                             </label>
                             @if ($this->usesSeparateCtnPcsCount())
-                                <div class="mb-2 text-sm text-gray-500">
-                                    Isi CTN sesuai stok area karton dan PCS sesuai stok area eceran.
+                                <div class="mb-3 rounded-xl border border-gray-300 bg-white p-3 text-center dark:border-gray-700 dark:bg-gray-900">
+                                    <div class="text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Stok Sistem {{ strtoupper($separateCountMode) }}</div>
+                                    <div class="text-3xl font-black text-black dark:text-white">{{ $this->getActiveModeSystemQty() }}</div>
+                                </div>
+                                @php($activeQtyIndexes = $this->getSeparateCountModeIndexes())
+                                <div class="grid gap-2 sm:gap-4" style="grid-template-columns: repeat({{ count($activeQtyIndexes) }}, minmax(0, 1fr))">
+                                    @foreach ($activeQtyIndexes as $activeQtyIndex)
+                                        <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                                            <label class="mb-2 block text-center text-xs font-semibold uppercase text-gray-500">
+                                                {{ $qtyLabels[$activeQtyIndex] ?? strtoupper($separateCountMode) }}
+                                            </label>
+                                            <x-filament::input
+                                                type="number"
+                                                min="0"
+                                                wire:model="qtyLevels.{{ $activeQtyIndex }}"
+                                                class="text-center text-2xl font-bold"
+                                            />
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <div class="grid gap-2 sm:gap-4" style="grid-template-columns: repeat({{ count($qtyLabels) }}, minmax(0, 1fr))">
+                                    @foreach ($qtyLabels as $index => $label)
+                                        <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                                            <label class="mb-2 block text-center text-xs font-semibold uppercase text-gray-500">
+                                                {{ $label }}
+                                            </label>
+                                            <x-filament::input
+                                                type="number"
+                                                min="0"
+                                                wire:model="qtyLevels.{{ $index }}"
+                                                class="text-center text-2xl font-bold"
+                                            />
+                                        </div>
+                                    @endforeach
                                 </div>
                             @endif
-                            <div class="grid gap-2 sm:gap-4" style="grid-template-columns: repeat({{ count($qtyLabels) }}, minmax(0, 1fr))">
-                                @foreach ($qtyLabels as $index => $label)
-                                    <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
-                                        <label class="mb-2 block text-center text-xs font-semibold uppercase text-gray-500">
-                                            {{ $label }}
-                                        </label>
-                                        <x-filament::input
-                                            type="number"
-                                            min="0"
-                                            wire:model="qtyLevels.{{ $index }}"
-                                            class="text-center text-2xl font-bold"
-                                        />
-                                    </div>
-                                @endforeach
-                            </div>
                         </div>
 
                         @if ($isEditing)
@@ -1084,15 +1121,29 @@
                             @if (! $isEditing)
                                 <div class="distora-scan-actions">
                                     <x-filament::button
-                                        wire:click="submitActualQty"
+                                        wire:click="{{ $this->usesSeparateCtnPcsCount() ? 'markCurrentModeMatched' : 'submitActualQty' }}"
                                         color="primary"
                                         size="xl"
                                         icon="heroicon-m-check"
                                         class="w-full"
                                     >
-                                        Simpan Hasil
+                                        {{ $this->usesSeparateCtnPcsCount() ? 'Sesuai, Lanjut' : 'Simpan Hasil' }}
                                     </x-filament::button>
                                 </div>
+
+                                @if ($this->usesSeparateCtnPcsCount())
+                                    <div class="distora-scan-actions">
+                                        <x-filament::button
+                                            wire:click="submitActualQty"
+                                            color="gray"
+                                            size="sm"
+                                            icon="heroicon-m-pencil-square"
+                                            class="w-full"
+                                        >
+                                            Simpan Angka
+                                        </x-filament::button>
+                                    </div>
+                                @endif
 
                                 <div class="distora-scan-actions">
                                     <x-filament::button
@@ -1108,15 +1159,29 @@
                             @else
                                 <div class="distora-scan-actions">
                                     <x-filament::button
-                                        wire:click="submitActualQty"
+                                        wire:click="{{ $this->usesSeparateCtnPcsCount() ? 'markCurrentModeMatched' : 'submitActualQty' }}"
                                         color="primary"
                                         size="xl"
                                         icon="heroicon-m-check"
                                         class="w-full"
                                     >
-                                        Simpan Koreksi
+                                        {{ $this->usesSeparateCtnPcsCount() ? 'Sesuai, Lanjut' : 'Simpan Koreksi' }}
                                     </x-filament::button>
                                 </div>
+
+                                @if ($this->usesSeparateCtnPcsCount())
+                                    <div class="distora-scan-actions">
+                                        <x-filament::button
+                                            wire:click="submitActualQty"
+                                            color="gray"
+                                            size="sm"
+                                            icon="heroicon-m-pencil-square"
+                                            class="w-full"
+                                        >
+                                            Simpan Angka
+                                        </x-filament::button>
+                                    </div>
+                                @endif
                             @endif
                         </div>
                     </div>
