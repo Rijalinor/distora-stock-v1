@@ -106,6 +106,8 @@
                             stream: null,
                             detector: null,
                             scanning: false,
+                            scanLocked: false,
+                            flashScan: false,
                             scanMode: 'santai',
                             lastScanValue: null,
                             lastScanAt: 0,
@@ -160,6 +162,11 @@
                             async scanFrame() {
                                 if (! this.scanning) return;
 
+                                if (this.scanLocked) {
+                                    requestAnimationFrame(() => this.scanFrame());
+                                    return;
+                                }
+
                                 try {
                                     const codes = await this.detector.detect(this.$refs.video);
                                     const value = codes[0]?.rawValue?.trim();
@@ -179,6 +186,10 @@
 
                                         this.lastScanValue = value;
                                         this.lastScanAt = now;
+                                        this.scanLocked = true;
+                                        this.flashScan = true;
+                                        setTimeout(() => this.flashScan = false, 1000);
+                                        setTimeout(() => this.scanLocked = false, 1000);
                                         this.status = `Terbaca: ${value}`;
                                         navigator.vibrate?.(60);
                                         this.beep();
@@ -198,6 +209,8 @@
                             },
                             stopCamera() {
                                 this.scanning = false;
+                                this.scanLocked = false;
+                                this.flashScan = false;
                                 this.stream?.getTracks().forEach(track => track.stop());
                                 this.stream = null;
                                 if (this.$refs.video) this.$refs.video.srcObject = null;
@@ -209,6 +222,7 @@
                         <div class="overflow-hidden rounded-xl border border-gray-200 bg-black dark:border-gray-700" style="aspect-ratio: 16 / 9;">
                             <div class="relative h-full w-full bg-black">
                                 <video x-ref="video" class="absolute inset-0 h-full w-full object-cover" playsinline muted></video>
+                                <div x-show="flashScan" x-transition.opacity class="absolute inset-0 bg-white/80"></div>
                             </div>
                         </div>
                         <div class="h-5 truncate text-center text-sm text-gray-500" x-text="status"></div>
@@ -374,12 +388,59 @@
                     />
                 </div>
 
+                @if ($itemsData['latestItem'])
+                    @php($latest = $itemsData['latestItem'])
+                    <div class="mb-3 rounded-lg border border-primary-200 bg-primary-50 p-3 dark:border-primary-800 dark:bg-primary-950/30">
+                        <div class="text-xs font-semibold uppercase text-primary-700 dark:text-primary-300">Scan Terakhir</div>
+                        <div class="mt-2 divide-y divide-primary-100 dark:divide-primary-900">
+                                <div class="py-2 first:pt-0 last:pb-0">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="min-w-0">
+                                            <div class="break-words text-sm font-semibold leading-snug">{{ $latest->itemMaster->nama_barang }}</div>
+                                            <div class="mt-0.5 truncate font-mono text-xs text-gray-600 dark:text-gray-400">
+                                                {{ $latest->itemMaster->principal?->nama ?: 'Tanpa prinsipal' }} · {{ $latest->itemMaster->kode_barang }}
+                                            </div>
+                                            <div class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">{{ $latest->lastScanner?->name ? 'Oleh ' . $latest->lastScanner->name : 'Scan terakhir' }}</div>
+                                        </div>
+                                        <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                                            @if ($check->status === \App\Enums\DamageCheckStatus::Open)
+                                                <button type="button" wire:click="changeQuantity({{ $latest->id }}, -1)" @disabled($latest->qty_rusak_base <= 1) class="flex shrink-0 items-center justify-center rounded-lg text-xl font-bold text-white disabled:opacity-40" style="width: 40px; height: 40px; background-color: #f59e0b;">−</button>
+                                            @endif
+                                            <div class="min-w-16 text-center text-sm font-bold text-primary-700 dark:text-primary-300">{{ $latest->qty_rusak_display }}</div>
+                                            @if ($check->status === \App\Enums\DamageCheckStatus::Open)
+                                                <button type="button" wire:click="changeQuantity({{ $latest->id }}, 1)" class="flex shrink-0 items-center justify-center rounded-lg text-xl font-bold text-white" style="width: 40px; height: 40px; background-color: #16a34a;">+</button>
+                                                <div x-data="{ open: false }" class="flex shrink-0 items-center gap-1">
+                                                    <button type="button" x-on:click="open = ! open" class="flex items-center justify-center rounded-lg text-sm font-black text-white" style="width:40px;height:40px;background:#0d9488">++</button>
+                                                    <div x-show="open" x-transition class="flex items-center gap-1">
+                                                        <x-filament::input type="number" min="1" wire:model="bulkQty.{{ $latest->id }}" class="w-20 text-center font-bold" />
+                                                        <button type="button" wire:click="addBulkQuantity({{ $latest->id }})" class="rounded-lg px-3 text-sm font-bold text-white" style="height:40px;background:#0d9488">Tambah</button>
+                                                    </div>
+                                                </div>
+                                                <button type="button" aria-label="Hapus salah scan" x-on:click.prevent="if (confirm('Hapus item salah scan ini?')) $wire.deleteItem({{ $latest->id }})" class="flex shrink-0 items-center justify-center rounded-lg text-white" style="width: 40px; height: 40px; background-color: #dc2626;">
+                                                    <x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" />
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                        </div>
+                    </div>
+                @endif
+
+                <div class="mb-2 text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Daftar tersusun</div>
                 <div class="space-y-2">
-                    @forelse ($itemsData['items'] as $row)
+                    @forelse ($itemsData['items']->groupBy(fn ($row) => $row->itemMaster->principal?->nama ?: 'Tanpa prinsipal') as $principalName => $principalRows)
+                        <div x-data="{ open: true }" class="rounded-lg border border-gray-200 dark:border-gray-700">
+                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 p-3 text-left">
+                                <span class="min-w-0 truncate text-sm font-bold">{{ $principalName }}</span>
+                                <span class="shrink-0 text-xs text-gray-500">{{ $principalRows->count() }} item</span>
+                            </button>
+                            <div x-show="open" class="space-y-2 border-t border-gray-100 p-3 dark:border-gray-800">
+                                @foreach ($principalRows as $row)
                         <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                             <div class="min-w-0">
                                 <div class="break-words text-sm font-semibold leading-snug">{{ $row->itemMaster->nama_barang }}</div>
-                                <div class="mt-0.5 truncate font-mono text-xs text-gray-500">{{ $row->itemMaster->kode_barang }} · {{ $row->itemMaster->barcode ?: 'Tanpa barcode' }}</div>
+                                <div class="mt-0.5 truncate font-mono text-xs text-gray-500">{{ $row->itemMaster->principal?->nama ?: 'Tanpa prinsipal' }} · {{ $row->itemMaster->kode_barang }} · {{ $row->itemMaster->barcode ?: 'Tanpa barcode' }}</div>
                                 @if ($row->lastScanner)
                                     <div class="mt-0.5 text-xs text-gray-500">Scan terakhir: {{ $row->lastScanner->name }}</div>
                                 @endif
@@ -403,6 +464,9 @@
                                         <x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" />
                                     </button>
                                 @endif
+                            </div>
+                        </div>
+                                @endforeach
                             </div>
                         </div>
                     @empty

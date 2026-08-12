@@ -384,11 +384,11 @@ class DamageChecker extends Page
     public function getItemsData(): array
     {
         if (! $this->selectedCheckId) {
-            return ['items' => collect(), 'total' => 0];
+            return ['items' => collect(), 'latestItem' => null, 'total' => 0];
         }
 
         $query = DamageCheckItem::query()
-            ->with(['itemMaster', 'lastScanner'])
+            ->with(['itemMaster.principal', 'lastScanner'])
             ->where('damage_check_id', $this->selectedCheckId)
             ->when(trim($this->itemSearch) !== '', function ($query): void {
                 $search = '%' . trim($this->itemSearch) . '%';
@@ -400,7 +400,16 @@ class DamageChecker extends Page
             });
 
         return [
-            'items' => (clone $query)->orderByDesc('last_scanned_at')->orderByDesc('id')->limit($this->itemsLimit)->get(),
+            'items' => (clone $query)
+                ->select('damage_check_items.*')
+                ->join('item_masters', 'item_masters.id', '=', 'damage_check_items.item_master_id')
+                ->leftJoin('principals', 'principals.id', '=', 'item_masters.principal_id')
+                ->orderBy('principals.nama')
+                ->orderBy('item_masters.kode_barang')
+                ->orderBy('damage_check_items.id')
+                ->limit($this->itemsLimit)
+                ->get(),
+            'latestItem' => (clone $query)->orderByDesc('last_scanned_at')->orderByDesc('id')->first(),
             'total' => $query->count(),
         ];
     }
