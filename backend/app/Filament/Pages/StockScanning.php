@@ -68,6 +68,16 @@ class StockScanning extends Page
 
     public int $mismatchedItemsLimit = 10;
 
+    public bool $showComparisonPanel = false;
+
+    public bool $showFoundItemsPanel = false;
+
+    public bool $showCheckedItemsPanel = false;
+
+    public bool $showMismatchedItemsPanel = false;
+
+    public bool $showPendingItemsPanel = false;
+
     public ?string $notFoundBarcode = null;
 
     public string $foundItemName = '';
@@ -627,6 +637,19 @@ class StockScanning extends Page
     {
         $this->mismatchedItemsLimit += 10;
     }
+
+    public function togglePanel(string $panel): void
+    {
+        match ($panel) {
+            'comparison' => $this->showComparisonPanel = ! $this->showComparisonPanel,
+            'found' => $this->showFoundItemsPanel = ! $this->showFoundItemsPanel,
+            'checked' => $this->showCheckedItemsPanel = ! $this->showCheckedItemsPanel,
+            'mismatched' => $this->showMismatchedItemsPanel = ! $this->showMismatchedItemsPanel,
+            'pending' => $this->showPendingItemsPanel = ! $this->showPendingItemsPanel,
+            default => null,
+        };
+    }
+
     public function getFoundItemsData()
     {
         return StockFoundItem::query()
@@ -918,6 +941,11 @@ class StockScanning extends Page
         $this->comparisonLimit = 10;
         $this->foundItemsLimit = 10;
         $this->mismatchedItemsLimit = 10;
+        $this->showComparisonPanel = false;
+        $this->showFoundItemsPanel = false;
+        $this->showCheckedItemsPanel = false;
+        $this->showMismatchedItemsPanel = false;
+        $this->showPendingItemsPanel = false;
         $this->foundItemName = '';
         $this->foundItemMasterId = null;
         $this->foundSystemQtyDisplay = '';
