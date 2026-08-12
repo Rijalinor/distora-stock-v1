@@ -10,6 +10,7 @@
             init() {
                 this.updateClock();
                 setInterval(() => this.updateClock(), 1000);
+                this.focusBarcode();
             },
             updateClock() {
                 this.clock = new Intl.DateTimeFormat('id-ID', {
@@ -65,7 +66,11 @@
                 this.focusBarcode();
             },
             focusBarcode() {
-                this.$nextTick(() => this.$refs.barcodeInput?.focus());
+                this.$nextTick(() => {
+                    [0, 75, 200, 500].forEach((delay) => {
+                        setTimeout(() => this.$refs.barcodeInput?.focus(), delay);
+                    });
+                });
             },
         }"
         x-on:stock-item-scanned.window="feedbackSuccess()"
@@ -133,7 +138,9 @@
                     @endforelse
                 </div>
             </x-filament::section>
-        @else
+        @endif
+
+        @if ($session)
             @php
                 $pct = $session->total_items > 0
                     ? round(($session->checked_items / $session->total_items) * 100)
@@ -325,6 +332,11 @@
                             type="text"
                             wire:model="barcode"
                             x-ref="barcodeInput"
+                            autofocus
+                            inputmode="none"
+                            autocomplete="off"
+                            autocapitalize="off"
+                            spellcheck="false"
                             placeholder="Ketik barcode, kode, atau nama barang..."
                             class="text-xl"
                         />
@@ -619,43 +631,43 @@
                 </div>
             </x-filament::section>
 
-            @php
-                $comparisonDate = $this->getComparisonDateForSession($session);
-                $comparisonRows = $this->getComparisonRowsForSession($session)
-                    ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
-                    ->values();
-                $comparisonFoundItems = $this->getFoundItemsData();
-                $comparisonSearch = trim($comparisonSearch ?? '');
-                $comparisonFilter = in_array($comparisonFilter, ['changed', 'unchanged', 'normal'], true)
-                    ? $comparisonFilter
-                    : 'changed';
-                $comparisonStatusMap = [
-                    'changed' => ['Berubah'],
-                    'unchanged' => ['Tidak Berubah'],
-                    'normal' => ['Sudah Normal'],
-                ];
-                $filteredComparisonRows = $comparisonRows
-                    ->when(isset($comparisonStatusMap[$comparisonFilter]), fn ($rows) => $rows->filter(fn ($row) => in_array($row['status'], $comparisonStatusMap[$comparisonFilter], true)))
-                    ->when($comparisonSearch !== '', fn ($rows) => $rows->filter(fn ($row) => str_contains(strtolower($row['kode_barang'] . ' ' . $row['nama_barang'] . ' ' . $row['status']), strtolower($comparisonSearch))));
-                $comparisonFilterOptions = [
-                    'changed' => ['label' => 'Berubah', 'count' => $comparisonRows->where('status', 'Berubah')->count()],
-                    'unchanged' => ['label' => 'Tidak Berubah', 'count' => $comparisonRows->where('status', 'Tidak Berubah')->count()],
-                    'normal' => ['label' => 'Sudah Normal', 'count' => $comparisonRows->where('status', 'Sudah Normal')->count()],
-                ];
-            @endphp
-            <div x-data="{ open: false }">
+            <div>
                 <x-filament::section>
                     <x-slot name="heading">
-                        <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                        <button type="button" wire:click="togglePanel('comparison')" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
                             <span class="flex items-center gap-2.5">
                                 Perbandingan
-                                <x-filament::badge :color="$comparisonRows->isNotEmpty() ? 'warning' : 'gray'" size="lg">{{ $comparisonRows->count() }}</x-filament::badge>
+                                <x-filament::badge :color="$showComparisonPanel ? 'warning' : 'gray'" size="lg">{{ $showComparisonPanel ? 'Terbuka' : 'Buka' }}</x-filament::badge>
                             </span>
-                            <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                            <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition {{ $showComparisonPanel ? 'rotate-180' : '' }}" />
                         </button>
                     </x-slot>
 
-                    <div x-show="open">
+                    @if ($showComparisonPanel)
+                    @php
+                        $comparisonDate = $this->getComparisonDateForSession($session);
+                        $comparisonRows = $this->getComparisonRowsForSession($session)
+                            ->sortBy('kode_barang', SORT_NATURAL | SORT_FLAG_CASE)
+                            ->values();
+                        $comparisonSearch = trim($comparisonSearch ?? '');
+                        $comparisonFilter = in_array($comparisonFilter, ['changed', 'unchanged', 'normal'], true)
+                            ? $comparisonFilter
+                            : 'changed';
+                        $comparisonStatusMap = [
+                            'changed' => ['Berubah'],
+                            'unchanged' => ['Tidak Berubah'],
+                            'normal' => ['Sudah Normal'],
+                        ];
+                        $filteredComparisonRows = $comparisonRows
+                            ->when(isset($comparisonStatusMap[$comparisonFilter]), fn ($rows) => $rows->filter(fn ($row) => in_array($row['status'], $comparisonStatusMap[$comparisonFilter], true)))
+                            ->when($comparisonSearch !== '', fn ($rows) => $rows->filter(fn ($row) => str_contains(strtolower($row['kode_barang'] . ' ' . $row['nama_barang'] . ' ' . $row['status']), strtolower($comparisonSearch))));
+                        $comparisonFilterOptions = [
+                            'changed' => ['label' => 'Berubah', 'count' => $comparisonRows->where('status', 'Berubah')->count()],
+                            'unchanged' => ['label' => 'Tidak Berubah', 'count' => $comparisonRows->where('status', 'Tidak Berubah')->count()],
+                            'normal' => ['label' => 'Sudah Normal', 'count' => $comparisonRows->where('status', 'Sudah Normal')->count()],
+                        ];
+                    @endphp
+                    <div>
                         <div class="mb-3 text-xs leading-relaxed text-gray-500">
                             @if ($comparisonDate)
                                 Dibandingkan dengan stock opname terakhir: {{ \Carbon\Carbon::parse($comparisonDate)->format('d M Y') }}.
@@ -740,23 +752,28 @@
                             </div>
                         @endif
                     </div>
+                    @endif
                 </x-filament::section>
             </div>
 
             @if ($session->found_items_count > 0)
-                <div x-data="{ open: false }">
+                @php
+                    $comparisonFoundItems = $showFoundItemsPanel ? $this->getFoundItemsData() : collect();
+                @endphp
+                <div>
                     <x-filament::section>
                         <x-slot name="heading">
-                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                            <button type="button" wire:click="togglePanel('found')" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
                                 <span class="flex items-center gap-2.5">
                                     Barang Temuan
                                     <x-filament::badge color="warning" size="lg">{{ $session->found_items_count }}</x-filament::badge>
                                 </span>
-                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition {{ $showFoundItemsPanel ? 'rotate-180' : '' }}" />
                             </button>
                         </x-slot>
 
-                        <div x-show="open" class="grid gap-3">
+                        @if ($showFoundItemsPanel)
+                        <div class="grid gap-3">
                             @foreach ($comparisonFoundItems as $item)
                                 <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                                     <div class="flex items-start justify-between gap-3">
@@ -802,28 +819,30 @@
                                 </x-filament::button>
                             @endif
                         </div>
+                        @endif
                     </x-filament::section>
                 </div>
             @endif
 
-            @php
-                $checkedData = $this->getCheckedItemsData();
-                $filteredCheckedItems = $checkedData['items'];
-            @endphp
             @if ($session->checked_items > 0)
-                <div x-data="{ open: false }">
+                <div>
                     <x-filament::section>
                         <x-slot name="heading">
-                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                            <button type="button" wire:click="togglePanel('checked')" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
                                 <span class="flex items-center gap-2.5">
                                     Sudah Dicek
                                     <x-filament::badge color="success" size="lg">{{ $session->checked_items }}</x-filament::badge>
                                 </span>
-                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition {{ $showCheckedItemsPanel ? 'rotate-180' : '' }}" />
                             </button>
                         </x-slot>
 
-                        <div x-show="open">
+                        @if ($showCheckedItemsPanel)
+                        @php
+                            $checkedData = $this->getCheckedItemsData();
+                            $filteredCheckedItems = $checkedData['items'];
+                        @endphp
+                        <div>
                             <div class="mb-3">
                                 <x-filament::input
                                     type="search"
@@ -872,32 +891,34 @@
                         </div>
 
                         @if ($checkedData['total'] > 25)
-                            <div x-show="open" class="mt-3 text-center text-sm text-gray-400">
+                            <div class="mt-3 text-center text-sm text-gray-400">
                                 + {{ $checkedData['total'] - 25 }} hasil lainnya, gunakan pencarian
                             </div>
+                        @endif
                         @endif
                     </x-filament::section>
                 </div>
             @endif
 
-            @php
-                $mismatchedData = $this->getMismatchedItemsData();
-                $mismatchedItems = $mismatchedData['items'];
-            @endphp
             @if ($session->mismatched_items > 0)
-                <div x-data="{ open: {{ $mismatchedItems->count() <= 3 ? 'true' : 'false' }} }">
+                <div>
                     <x-filament::section>
                         <x-slot name="heading">
-                            <button type="button" x-on:click="open = ! open" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
+                            <button type="button" wire:click="togglePanel('mismatched')" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
                                 <span class="flex items-center gap-2.5">
                                     Item Selisih
                                     <x-filament::badge color="danger" size="lg">{{ $session->mismatched_items }}</x-filament::badge>
                                 </span>
-                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition" x-bind:class="{ 'rotate-180': open }" />
+                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition {{ $showMismatchedItemsPanel ? 'rotate-180' : '' }}" />
                             </button>
                         </x-slot>
 
-                        <div x-show="open" class="grid gap-3">
+                        @if ($showMismatchedItemsPanel)
+                        @php
+                            $mismatchedData = $this->getMismatchedItemsData();
+                            $mismatchedItems = $mismatchedData['items'];
+                        @endphp
+                        <div class="grid gap-3">
                             @foreach ($mismatchedItems as $item)
                                 <button
                                     type="button"
@@ -927,28 +948,33 @@
                                 </x-filament::button>
                             @endif
                         </div>
+                        @endif
                     </x-filament::section>
                 </div>
             @endif
 
             @php
-                $pendingData = $this->getPendingItemsData();
-                $filteredPendingItems = $pendingData['items'];
                 $pendingTotal = max(0, $session->total_items - $session->checked_items);
             @endphp
             @if ($pendingTotal > 0)
-                <div x-data="{ open: true }">
+                <div>
                     <x-filament::section>
                         <x-slot name="heading">
-                            <div class="flex w-full items-center text-left text-sm font-semibold">
+                            <button type="button" wire:click="togglePanel('pending')" class="flex w-full items-center justify-between gap-3 text-left text-sm font-semibold">
                                 <span class="flex items-center gap-2.5">
                                     Belum Dicek
                                     <x-filament::badge color="gray" size="lg">{{ $pendingTotal }}</x-filament::badge>
                                 </span>
-                            </div>
+                                <x-filament::icon icon="heroicon-m-chevron-down" class="h-5 w-5 shrink-0 text-gray-400 transition {{ $showPendingItemsPanel ? 'rotate-180' : '' }}" />
+                            </button>
                         </x-slot>
 
-                        <div x-show="open">
+                        @if ($showPendingItemsPanel)
+                        @php
+                            $pendingData = $this->getPendingItemsData();
+                            $filteredPendingItems = $pendingData['items'];
+                        @endphp
+                        <div>
                             <div class="mb-3">
                                 <x-filament::input
                                     type="search"
@@ -1010,6 +1036,7 @@
                                 </div>
                             @endif
                         </div>
+                        @endif
                     </x-filament::section>
                 </div>
             @endif
@@ -1187,9 +1214,7 @@
                     </div>
                 </x-filament::section>
             @endif
-        @endif
 
-        @if ($session)
             <div
                 x-data="{
                     open: false,
