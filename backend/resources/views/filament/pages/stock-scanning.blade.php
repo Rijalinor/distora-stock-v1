@@ -333,7 +333,7 @@
                             wire:model="barcode"
                             x-ref="barcodeInput"
                             autofocus
-                            inputmode="none"
+                            inputmode="text"
                             autocomplete="off"
                             autocapitalize="off"
                             spellcheck="false"
@@ -1087,31 +1087,28 @@
                         @endif
 
                         <div>
-                            <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                                {{ $this->usesSeparateCtnPcsCount() ? 'Qty Aktual ' . strtoupper($separateCountMode) : 'Qty Aktual' }}
-                            </label>
                             @if ($this->usesSeparateCtnPcsCount())
-                                <div class="mb-3 rounded-xl border border-gray-300 bg-white p-3 text-center dark:border-gray-700 dark:bg-gray-900">
-                                    <div class="text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Stok Sistem {{ strtoupper($separateCountMode) }}</div>
-                                    <div class="text-3xl font-black text-black dark:text-white">{{ $this->getActiveModeSystemQty() }}</div>
+                                @php($activeQtyIndex = $this->getSeparateCountModeIndex())
+                                <div class="mb-2 flex items-end justify-between gap-3">
+                                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                        Qty Aktual {{ $qtyLabels[$activeQtyIndex] ?? strtoupper($separateCountMode) }}
+                                    </label>
+                                    <div class="text-right text-sm text-gray-500 dark:text-gray-400">
+                                        Sistem: <span class="font-bold text-gray-900 dark:text-white">{{ $this->getActiveModeSystemQty() }}</span>
+                                    </div>
                                 </div>
-                                @php($activeQtyIndexes = $this->getSeparateCountModeIndexes())
-                                <div class="grid gap-2 sm:gap-4" style="grid-template-columns: repeat({{ count($activeQtyIndexes) }}, minmax(0, 1fr))">
-                                    @foreach ($activeQtyIndexes as $activeQtyIndex)
-                                        <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
-                                            <label class="mb-2 block text-center text-xs font-semibold uppercase text-gray-500">
-                                                {{ $qtyLabels[$activeQtyIndex] ?? strtoupper($separateCountMode) }}
-                                            </label>
-                                            <x-filament::input
-                                                type="number"
-                                                min="0"
-                                                wire:model="qtyLevels.{{ $activeQtyIndex }}"
-                                                class="text-center text-2xl font-bold"
-                                            />
-                                        </div>
-                                    @endforeach
+                                <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                                    <x-filament::input
+                                        type="number"
+                                        min="0"
+                                        wire:model="qtyLevels.{{ $activeQtyIndex }}"
+                                        class="text-center text-3xl font-bold"
+                                    />
                                 </div>
                             @else
+                                <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                    Qty Aktual
+                                </label>
                                 <div class="grid gap-2 sm:gap-4" style="grid-template-columns: repeat({{ count($qtyLabels) }}, minmax(0, 1fr))">
                                     @foreach ($qtyLabels as $index => $label)
                                         <div class="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
@@ -1145,71 +1142,17 @@
                         @endif
 
                         <div class="space-y-3 pt-2">
-                            @if (! $isEditing)
-                                <div class="distora-scan-actions">
-                                    <x-filament::button
-                                        wire:click="{{ $this->usesSeparateCtnPcsCount() ? 'markCurrentModeMatched' : 'submitActualQty' }}"
-                                        color="primary"
-                                        size="xl"
-                                        icon="heroicon-m-check"
-                                        class="w-full"
-                                    >
-                                        {{ $this->usesSeparateCtnPcsCount() ? 'Sesuai, Lanjut' : 'Simpan Hasil' }}
-                                    </x-filament::button>
-                                </div>
-
-                                @if ($this->usesSeparateCtnPcsCount())
-                                    <div class="distora-scan-actions">
-                                        <x-filament::button
-                                            wire:click="submitActualQty"
-                                            color="gray"
-                                            size="sm"
-                                            icon="heroicon-m-pencil-square"
-                                            class="w-full"
-                                        >
-                                            Simpan Angka
-                                        </x-filament::button>
-                                    </div>
-                                @endif
-
-                                <div class="distora-scan-actions">
-                                    <x-filament::button
-                                        wire:click="markMissing"
-                                        color="gray"
-                                        size="sm"
-                                        icon="heroicon-m-eye-slash"
-                                        class="w-full"
-                                    >
-                                        Tidak Ada
-                                    </x-filament::button>
-                                </div>
-                            @else
-                                <div class="distora-scan-actions">
-                                    <x-filament::button
-                                        wire:click="{{ $this->usesSeparateCtnPcsCount() ? 'markCurrentModeMatched' : 'submitActualQty' }}"
-                                        color="primary"
-                                        size="xl"
-                                        icon="heroicon-m-check"
-                                        class="w-full"
-                                    >
-                                        {{ $this->usesSeparateCtnPcsCount() ? 'Sesuai, Lanjut' : 'Simpan Koreksi' }}
-                                    </x-filament::button>
-                                </div>
-
-                                @if ($this->usesSeparateCtnPcsCount())
-                                    <div class="distora-scan-actions">
-                                        <x-filament::button
-                                            wire:click="submitActualQty"
-                                            color="gray"
-                                            size="sm"
-                                            icon="heroicon-m-pencil-square"
-                                            class="w-full"
-                                        >
-                                            Simpan Angka
-                                        </x-filament::button>
-                                    </div>
-                                @endif
-                            @endif
+                            <div class="distora-scan-actions">
+                                <x-filament::button
+                                    wire:click="submitActualQty"
+                                    color="primary"
+                                    size="xl"
+                                    icon="heroicon-m-check"
+                                    class="w-full"
+                                >
+                                    {{ $isEditing ? 'Simpan Koreksi' : 'Simpan Hasil' }}
+                                </x-filament::button>
+                            </div>
                         </div>
                     </div>
                 </x-filament::section>

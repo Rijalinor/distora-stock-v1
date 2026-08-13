@@ -344,7 +344,19 @@ class StockScanning extends Page
             $this->getQtyFactorsForItem($this->scannedItem)
         );
 
-        foreach ($this->getSeparateCountModeIndexes() as $index) {
+        if ($this->usesSeparateCtnPcsCount()) {
+            $activeIndexes = $this->getSeparateCountModeIndexes();
+            $this->qtyLevels = $this->scannedItem->qty_aktual_base !== null
+                ? StockScanningService::splitBaseQuantity(
+                    $this->scannedItem->qty_aktual_base,
+                    $this->getQtyFactorsForItem($this->scannedItem)
+                )
+                : array_fill(0, count($systemLevels), 0);
+        } else {
+            $activeIndexes = array_keys($systemLevels);
+        }
+
+        foreach ($activeIndexes as $index) {
             $this->qtyLevels[$index] = $systemLevels[$index] ?? 0;
         }
 
@@ -810,8 +822,6 @@ class StockScanning extends Page
 
         if ($item->qty_aktual_base !== null) {
             $this->qtyLevels = StockScanningService::splitBaseQuantity($item->qty_aktual_base, $factors);
-        } elseif ($item->stockSession?->principal?->separate_ctn_pcs_count) {
-            $this->qtyLevels = array_fill(0, $levelsCount, 0);
         } else {
             $this->qtyLevels = StockScanningService::splitBaseQuantity($item->qty_sistem_base, $factors);
         }

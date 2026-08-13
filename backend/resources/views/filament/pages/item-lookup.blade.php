@@ -65,8 +65,8 @@
         class="mx-auto w-full max-w-4xl space-y-5 pb-16"
     >
         <x-filament::section>
-            <x-slot name="heading">Scan Barcode Barang</x-slot>
-            <x-slot name="description">Scan atau ketik barcode untuk melihat identitas barang.</x-slot>
+            <x-slot name="heading">Cek Barang</x-slot>
+            <x-slot name="description">Scan barcode atau ketik kode barang untuk melihat identitas barang.</x-slot>
 
             <div class="space-y-4">
                 <div class="overflow-hidden rounded-lg border border-gray-200 bg-black dark:border-gray-700">
@@ -83,7 +83,7 @@
                         type="text"
                         wire:model="barcode"
                         x-ref="barcodeInput"
-                        placeholder="Ketik atau scan barcode..."
+                        placeholder="Ketik barcode atau kode barang..."
                         class="text-xl"
                         autofocus
                     />
@@ -111,6 +111,27 @@
                             <div class="sm:col-span-2"><dt class="text-gray-500">Struktur Isi</dt><dd class="font-semibold">{{ $item['structure'] }}</dd></div>
                         @endif
                     </dl>
+
+                    <div class="rounded-xl border border-gray-700 bg-gray-950 p-4">
+                        <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Kalkulator PCS
+                        </label>
+                        <div class="grid gap-3 sm:grid-cols-[1fr_auto]">
+                            <x-filament::input
+                                type="number"
+                                min="0"
+                                wire:model.live.debounce.300ms="calculatorPcs.{{ $item['id'] }}"
+                                placeholder="Input total PCS..."
+                                class="text-xl"
+                            />
+                            <x-filament::input
+                                type="text"
+                                value="{{ $calculatorResults[$item['id']] ?? '0 ' . ($item['qty_labels'][array_key_last($item['qty_labels'])] ?? 'PCS') }}"
+                                readonly
+                                class="text-lg font-bold"
+                            />
+                        </div>
+                    </div>
                 </div>
             </x-filament::section>
         @endforeach
@@ -118,7 +139,7 @@
         @if ($searched && empty($items))
             <x-filament::empty-state
                 heading="Barang tidak ditemukan"
-                description="Barcode tidak terdaftar di Item Master cabang Anda."
+                description="Barcode atau kode barang tidak terdaftar di Item Master cabang Anda."
                 icon="heroicon-o-magnifying-glass"
             />
         @endif

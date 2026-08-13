@@ -117,10 +117,13 @@
             }
 
             .print-report .code {
-                width: 34mm;
+                width: 24mm;
                 font-family: Consolas, "Courier New", monospace;
+                font-size: 8.5pt;
                 font-weight: 700;
-                word-break: break-word;
+                line-height: 1;
+                overflow-wrap: anywhere;
+                word-break: break-all;
             }
 
             .print-report .name {
