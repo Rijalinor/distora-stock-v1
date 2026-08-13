@@ -65,7 +65,7 @@ class ItemMasterBackupService
     /**
      * @return array{created: int, updated: int, skipped: int, examples: array<int, array<string, string>>}
      */
-    public function previewCsv(string|UploadedFile $file, ?int $branchId = null): array
+    public function previewCsv(string|UploadedFile $file, ?int $branchId = null, bool $skipExisting = false): array
     {
         $path = $file instanceof UploadedFile
             ? $file->getRealPath()
@@ -108,7 +108,14 @@ class ItemMasterBackupService
             $branchCode = $forcedBranch?->kode ?? (trim((string) ($row['branch_kode'] ?? '')) ?: 'PUSAT');
             $targetBranchId = $forcedBranch?->id ?? $branchIds->get($branchCode);
             $code = trim($row['kode_barang']);
-            $action = $targetBranchId && $existingItems->has("{$targetBranchId}|{$code}") ? 'updated' : 'created';
+            $exists = $targetBranchId && $existingItems->has("{$targetBranchId}|{$code}");
+
+            if ($skipExisting && $exists) {
+                $preview['skipped']++;
+                continue;
+            }
+
+            $action = $exists ? 'updated' : 'created';
             $preview[$action]++;
 
             if (count($preview['examples']) < 5) {
@@ -128,7 +135,7 @@ class ItemMasterBackupService
     /**
      * @return array{created: int, updated: int, skipped: int}
      */
-    public function restoreCsv(string|UploadedFile $file, ?int $branchId = null): array
+    public function restoreCsv(string|UploadedFile $file, ?int $branchId = null, bool $skipExisting = false): array
     {
         $path = $file instanceof UploadedFile
             ? $file->getRealPath()
@@ -154,7 +161,7 @@ class ItemMasterBackupService
 
         $stats = ['created' => 0, 'updated' => 0, 'skipped' => 0];
 
-        DB::transaction(function () use ($handle, $headers, $branchId, &$stats): void {
+        DB::transaction(function () use ($handle, $headers, $branchId, $skipExisting, &$stats): void {
             while (($values = fgetcsv($handle)) !== false) {
                 $row = array_combine($headers, array_slice(array_pad($values, count($headers), ''), 0, count($headers)));
 
@@ -166,6 +173,16 @@ class ItemMasterBackupService
                 }
 
                 $branch = $this->resolveBranch($row, $branchId);
+                $item = ItemMaster::firstOrNew([
+                    'branch_id' => $branch->id,
+                    'kode_barang' => trim($row['kode_barang']),
+                ]);
+                $exists = $item->exists;
+
+                if ($skipExisting && $exists) {
+                    $stats['skipped']++;
+                    continue;
+                }
 
                 $principal = Principal::firstOrCreate(
                     ['kode' => trim($row['principal_kode'])],
@@ -178,12 +195,6 @@ class ItemMasterBackupService
                 if (filled($row['principal_nama'] ?? null) && $principal->nama !== trim($row['principal_nama'])) {
                     $principal->update(['nama' => trim($row['principal_nama'])]);
                 }
-
-                $item = ItemMaster::firstOrNew([
-                    'branch_id' => $branch->id,
-                    'kode_barang' => trim($row['kode_barang']),
-                ]);
-                $exists = $item->exists;
 
                 $item->fill([
                     'principal_id' => $principal->id,
@@ -227,10 +238,19 @@ class ItemMasterBackupService
         $value = trim($value);
 
         if (preg_match('/^="(.*)"$/s', $value, $matches)) {
-            return str_replace('""', '"', $matches[1]);
+            return $this->normalizeImportedText(str_replace('""', '"', $matches[1]));
         }
 
-        return $value;
+        return $this->normalizeImportedText($value);
+    }
+
+    protected function normalizeImportedText(string $value): string
+    {
+        if (! mb_check_encoding($value, 'UTF-8')) {
+            $value = mb_convert_encoding($value, 'UTF-8', 'Windows-1252, ISO-8859-1, UTF-8');
+        }
+
+        return str_replace("\xc2\xa0", ' ', $value);
     }
 
     protected function restoreQtyStructure(array $row): ?array

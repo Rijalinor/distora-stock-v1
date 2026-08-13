@@ -12,6 +12,7 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
@@ -51,6 +52,15 @@ class ListItemMasters extends ListRecords
                         ->visibility('private')
                         ->live()
                         ->required(),
+                    Radio::make('restore_mode')
+                        ->label('Mode Restore')
+                        ->options([
+                            'create_only' => 'Tambah item baru saja',
+                            'full' => 'Restore penuh (perbarui item yang sudah ada)',
+                        ])
+                        ->default('create_only')
+                        ->live()
+                        ->required(),
                     Placeholder::make('restore_preview')
                         ->label('Pratinjau')
                         ->content(function (Get $get) {
@@ -63,12 +73,15 @@ class ListItemMasters extends ListRecords
                                     'preview' => app(ItemMasterBackupService::class)->previewCsv(
                                         $get('backup_file'),
                                         auth()->user()?->isCentralAdmin() ? null : auth()->user()?->branch_id,
+                                        $get('restore_mode') !== 'full',
                                     ),
+                                    'createOnly' => $get('restore_mode') !== 'full',
                                     'error' => null,
                                 ]);
                             } catch (ValidationException $exception) {
                                 return view('filament.item-master-restore-preview', [
                                     'preview' => null,
+                                    'createOnly' => $get('restore_mode') !== 'full',
                                     'error' => collect($exception->errors())->flatten()->first(),
                                 ]);
                             }
@@ -78,6 +91,7 @@ class ListItemMasters extends ListRecords
                     $stats = app(ItemMasterBackupService::class)->restoreCsv(
                         $data['backup_file'],
                         auth()->user()?->isCentralAdmin() ? null : auth()->user()?->branch_id,
+                        ($data['restore_mode'] ?? 'create_only') !== 'full',
                     );
 
                     Notification::make()
