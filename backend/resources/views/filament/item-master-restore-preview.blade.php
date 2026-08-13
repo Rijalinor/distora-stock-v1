@@ -4,6 +4,12 @@
     </div>
 @elseif ($preview)
     <div class="space-y-4">
+        @if ($createOnly ?? false)
+            <div class="rounded-lg border border-info-200 bg-info-50 px-3 py-2 text-xs font-semibold text-info-700 dark:border-info-800 dark:bg-info-950/30 dark:text-info-300">
+                Mode tambah item baru saja: item yang sudah ada akan dilewati dan tidak ditimpa.
+            </div>
+        @endif
+
         <div class="grid grid-cols-3 gap-2">
             <div class="rounded-lg border border-success-200 bg-success-50 p-3 text-center dark:border-success-800 dark:bg-success-950/30">
                 <div class="text-2xl font-bold text-success-700 dark:text-success-300">{{ $preview['created'] }}</div>
@@ -40,6 +46,9 @@
 
         <div class="text-xs leading-relaxed text-gray-500">
             Item lain yang tidak terdapat dalam file tidak akan dihapus.
+            @if ($createOnly ?? false)
+                Item yang sudah ada juga tidak akan diubah.
+            @endif
         </div>
     </div>
 @endif

@@ -30,12 +30,6 @@ class ItemLookup extends Page
 
     public bool $searched = false;
 
-    /** @var array<int, int|string> */
-    public array $calculatorPcs = [];
-
-    /** @var array<int, string> */
-    public array $calculatorResults = [];
-
     public static function canAccess(): bool
     {
         $user = Auth::user();
@@ -48,88 +42,64 @@ class ItemLookup extends Page
         $this->barcode = trim($barcode ?? $this->barcode);
         $this->searched = true;
         $this->items = [];
-        $this->calculatorPcs = [];
-        $this->calculatorResults = [];
 
         if ($this->barcode === '') {
             return;
         }
 
         $user = Auth::user();
-        $query = ItemMaster::query()
+        $baseQuery = ItemMaster::query()
             ->with(['principal', 'branch', 'barcodes'])
-            ->where('status', true)
+            ->where('status', true);
+
+        if (! $user->isCentralAdmin()) {
+            $baseQuery->where('branch_id', $user->branch_id);
+        }
+
+        $items = (clone $baseQuery)
             ->where(fn ($query) => $query
                 ->where('barcode', $this->barcode)
                 ->orWhere('kode_barang', $this->barcode)
-                ->orWhere('kode_barang', 'like', '%' . $this->barcode . '%')
-                ->orWhereHas('barcodes', fn ($query) => $query->where('barcode', $this->barcode)));
+                ->orWhereHas('barcodes', fn ($query) => $query->where('barcode', $this->barcode)))
+            ->orderBy('nama_barang')
+            ->get();
 
-        if (! $user->isCentralAdmin()) {
-            $query->where('branch_id', $user->branch_id);
+        if ($items->isEmpty()) {
+            $items = (clone $baseQuery)
+                ->where('kode_barang', 'like', '%' . $this->barcode . '%')
+                ->orderBy('nama_barang')
+                ->get();
         }
 
-        $this->items = $query->orderBy('nama_barang')->get()->map(fn (ItemMaster $item): array => [
-            'id' => $item->id,
-            'code' => $item->kode_barang,
-            'barcode' => $item->barcodes->map(fn ($barcode) => "{$barcode->barcode} ({$barcode->unit_label}: {$barcode->qty_base} PCS)")->implode(', ') ?: $item->barcode,
-            'name' => $item->nama_barang,
-            'principal' => $item->principal?->nama ?? '-',
-            'branch' => $item->branch?->nama ?? '-',
-            'unit' => $item->satuan ?: implode('-', $item->getQtyLabelsArray()),
-            'qty_labels' => $item->getQtyLabelsArray(),
-            'qty_factors' => $item->getQtyFactorsArray() ?: StockScanningService::parseConversionFactors($item->nama_barang),
-            'structure' => collect($item->qty_structure ?? [])
-                ->map(fn (array $level): string => strtoupper($level['label']) . ' = ' . $level['factor'])
-                ->implode(', '),
-        ])->all();
+        $this->items = $items->map(function (ItemMaster $item): array {
+            $labels = $item->getQtyLabelsArray();
+            $factors = $item->getQtyFactorsArray() ?: StockScanningService::parseConversionFactors($item->nama_barang);
+
+            return [
+                'id' => $item->id,
+                'code' => $item->kode_barang,
+                'barcode' => $item->barcodes->map(fn ($barcode) => "{$barcode->barcode} ({$barcode->unit_label}: {$barcode->qty_base} PCS)")->implode(', ') ?: $item->barcode,
+                'name' => $item->nama_barang,
+                'principal' => $item->principal?->nama ?? '-',
+                'branch' => $item->branch?->nama ?? '-',
+                'unit' => $item->satuan ?: implode('-', $labels),
+                'calculator' => [
+                    'ctn_label' => $labels[0] ?? 'CTN',
+                    'pcs_label' => $labels[array_key_last($labels)] ?? 'PCS',
+                    'ctn_size' => max(1, (int) ($factors[0] ?? 1)),
+                ],
+                'structure' => collect($item->qty_structure ?? [])
+                    ->map(fn (array $level): string => strtoupper($level['label']) . ' = ' . $level['factor'])
+                    ->implode(', '),
+            ];
+        })->all();
 
         $this->dispatch($this->items ? 'item-lookup-found' : 'item-lookup-missing');
     }
 
-    public function updatedCalculatorPcs($value, string $key): void
-    {
-        $item = collect($this->items)->firstWhere('id', (int) $key);
-
-        if (! $item) {
-            return;
-        }
-
-        $pcs = max(0, (int) $value);
-        $factor = max(1, (int) ($item['qty_factors'][0] ?? 1));
-        $ctnLabel = $item['qty_labels'][0] ?? 'CTN';
-        $pcsLabel = $item['qty_labels'][array_key_last($item['qty_labels'])] ?? 'PCS';
-
-        if ($pcs === 0) {
-            $this->calculatorResults[$key] = "0 {$pcsLabel}";
-
-            return;
-        }
-
-        if ($factor <= 1) {
-            $this->calculatorResults[$key] = "{$pcs} {$pcsLabel}";
-
-            return;
-        }
-
-        $ctn = intdiv($pcs, $factor);
-        $remainder = $pcs % $factor;
-        $parts = [];
-
-        if ($ctn > 0) {
-            $parts[] = "{$ctn} {$ctnLabel}";
-        }
-
-        if ($remainder > 0) {
-            $parts[] = "{$remainder} {$pcsLabel}";
-        }
-
-        $this->calculatorResults[$key] = implode(' ', $parts);
-    }
-
     public function resetLookup(): void
     {
-        $this->reset(['barcode', 'items', 'searched', 'calculatorPcs', 'calculatorResults']);
+        $this->reset(['barcode', 'items', 'searched']);
         $this->dispatch('item-lookup-ready');
     }
 }

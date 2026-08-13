@@ -1,7 +1,18 @@
 <x-filament-panels::page>
     @php($check = $this->getSelectedCheck())
 
-    <div class="mx-auto w-full max-w-6xl space-y-4 pb-16 sm:space-y-6" x-data>
+    <div
+        class="mx-auto w-full max-w-6xl space-y-4 pb-16 sm:space-y-6"
+        x-data="{
+            checkedRows: {},
+            toggleRow(key) {
+                this.checkedRows[key] = ! this.checkedRows[key];
+            },
+            isChecked(key) {
+                return Boolean(this.checkedRows[key]);
+            },
+        }"
+    >
         @if (! $check)
             <x-filament::section>
                 <x-slot name="heading">Header Pemeriksaan Baru</x-slot>
@@ -437,7 +448,11 @@
                             </button>
                             <div x-show="open" class="space-y-2 border-t border-gray-100 p-3 dark:border-gray-800">
                                 @foreach ($principalRows as $row)
-                        <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                        <div
+                            class="rounded-lg border border-gray-200 p-3 transition dark:border-gray-700"
+                            x-on:click="toggleRow('item-{{ $row->id }}')"
+                            x-bind:style="isChecked('item-{{ $row->id }}') ? 'background-color: rgba(37, 99, 235, 0.22); border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f6;' : ''"
+                        >
                             <div class="min-w-0">
                                 <div class="break-words text-sm font-semibold leading-snug">{{ $row->itemMaster->nama_barang }}</div>
                                 <div class="mt-0.5 truncate font-mono text-xs text-gray-500">{{ $row->itemMaster->principal?->nama ?: 'Tanpa prinsipal' }} · {{ $row->itemMaster->kode_barang }} · {{ $row->itemMaster->barcode ?: 'Tanpa barcode' }}</div>
@@ -446,7 +461,7 @@
                                 @endif
                             </div>
 
-                            <div class="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                            <div class="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-2 dark:border-gray-800" x-on:click.stop>
                                 @if ($check->status === \App\Enums\DamageCheckStatus::Open)
                                     <button type="button" wire:click="changeQuantity({{ $row->id }}, -1)" @disabled($row->qty_rusak_base <= 1) class="flex shrink-0 items-center justify-center rounded-lg text-xl font-bold text-white disabled:opacity-40" style="width: 44px; height: 44px; background-color: #f59e0b;">−</button>
                                 @endif

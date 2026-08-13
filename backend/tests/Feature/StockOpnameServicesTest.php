@@ -92,7 +92,7 @@ class StockOpnameServicesTest extends TestCase
     }
 
     /** @test */
-    public function item_lookup_calculator_converts_pcs_to_ctn_and_pcs()
+    public function item_lookup_provides_calculator_data_from_qty_structure()
     {
         $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
         $principal = Principal::create([
@@ -118,12 +118,15 @@ class StockOpnameServicesTest extends TestCase
 
         \Livewire\Livewire::test(\App\Filament\Pages\ItemLookup::class)
             ->call('searchItem', $item->kode_barang)
-            ->set("calculatorPcs.{$item->id}", 6300)
-            ->assertSet("calculatorResults.{$item->id}", '262 CTN 12 PCS');
+            ->assertSet('items.0.calculator', [
+                'ctn_label' => 'CTN',
+                'pcs_label' => 'PCS',
+                'ctn_size' => 24,
+            ]);
     }
 
     /** @test */
-    public function item_lookup_calculator_handles_common_carton_sizes()
+    public function item_lookup_calculator_data_handles_common_carton_sizes()
     {
         $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
         $principal = Principal::create([
@@ -155,13 +158,12 @@ class StockOpnameServicesTest extends TestCase
 
             \Livewire\Livewire::test(\App\Filament\Pages\ItemLookup::class)
                 ->call('searchItem', $item->kode_barang)
-                ->set("calculatorPcs.{$item->id}", $case['pcs'])
-                ->assertSet("calculatorResults.{$item->id}", $case['expected']);
+                ->assertSet('items.0.calculator.ctn_size', $case['factor']);
         }
     }
 
     /** @test */
-    public function item_lookup_calculator_uses_item_name_factor_when_structure_is_empty()
+    public function item_lookup_calculator_data_uses_item_name_factor_when_structure_is_empty()
     {
         $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
         $principal = Principal::create([
@@ -183,8 +185,46 @@ class StockOpnameServicesTest extends TestCase
 
         \Livewire\Livewire::test(\App\Filament\Pages\ItemLookup::class)
             ->call('searchItem', $item->kode_barang)
-            ->set("calculatorPcs.{$item->id}", 6300)
-            ->assertSet("calculatorResults.{$item->id}", '175 CTN');
+            ->assertSet('items.0.calculator', [
+                'ctn_label' => 'CTN',
+                'pcs_label' => 'PCS',
+                'ctn_size' => 36,
+            ]);
+    }
+
+    /** @test */
+    public function item_lookup_prefers_exact_code_before_partial_code_search()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'LOOKUP-EXACT',
+            'nama' => 'Principal Lookup Exact',
+            'status' => true,
+        ]);
+        ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'ABC123',
+            'nama_barang' => 'Barang Exact',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+        ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'XX-ABC123-YY',
+            'nama_barang' => 'Barang Partial',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+        $user = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
+
+        $this->actingAs($user);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\ItemLookup::class)
+            ->call('searchItem', 'ABC123')
+            ->assertSet('items.0.code', 'ABC123')
+            ->assertSet('items', fn (array $items): bool => count($items) === 1);
     }
 
     /** @test */
@@ -701,6 +741,69 @@ class StockOpnameServicesTest extends TestCase
         $previewAfterRestore = app(ItemMasterBackupService::class)->previewCsv($file);
         $this->assertEquals(0, $previewAfterRestore['created']);
         $this->assertEquals(1, $previewAfterRestore['updated']);
+    }
+
+    /** @test */
+    public function it_normalizes_windows_encoded_spaces_when_restoring_item_master_backup()
+    {
+        $csv = implode("\n", [
+            '"principal_kode","principal_nama","kode_barang","barcode","nama_barang","satuan","status"',
+            '"=""P-NBSP""","Principal NBSP","=""ITEM-NBSP""","=""899NBSP""","Barang' . chr(160) . 'NBSP","PCS","active"',
+            '',
+        ]);
+
+        app(ItemMasterBackupService::class)->restoreCsv(UploadedFile::fake()->createWithContent('backup-nbsp.csv', $csv));
+
+        $this->assertDatabaseHas('item_masters', [
+            'kode_barang' => 'ITEM-NBSP',
+            'nama_barang' => 'Barang NBSP',
+        ]);
+    }
+
+    /** @test */
+    public function it_can_restore_only_new_item_master_rows_without_updating_existing_items()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'P-SKIP',
+            'nama' => 'Principal Skip',
+            'status' => true,
+        ]);
+        ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'ITEM-EXISTING',
+            'barcode' => '899OLD',
+            'nama_barang' => 'Nama Lama',
+            'principal_id' => $principal->id,
+            'satuan' => 'PCS',
+            'status' => true,
+        ]);
+
+        $csv = implode("\n", [
+            '"principal_kode","principal_nama","kode_barang","barcode","nama_barang","satuan","status"',
+            '"=""P-SKIP""","Principal Skip","=""ITEM-EXISTING""","=""899NEW""","Nama Baru","PCS","active"',
+            '"=""P-SKIP""","Principal Skip","=""ITEM-NEW""","=""899NEWITEM""","Item Baru","PCS","active"',
+            '',
+        ]);
+        $file = UploadedFile::fake()->createWithContent('backup-create-only.csv', $csv);
+
+        $preview = app(ItemMasterBackupService::class)->previewCsv($file, null, true);
+        $stats = app(ItemMasterBackupService::class)->restoreCsv($file, null, true);
+
+        $this->assertEquals(1, $preview['created']);
+        $this->assertEquals(0, $preview['updated']);
+        $this->assertEquals(1, $preview['skipped']);
+        $this->assertEquals(['created' => 1, 'updated' => 0, 'skipped' => 1], $stats);
+        $this->assertDatabaseHas('item_masters', [
+            'kode_barang' => 'ITEM-EXISTING',
+            'barcode' => '899OLD',
+            'nama_barang' => 'Nama Lama',
+        ]);
+        $this->assertDatabaseHas('item_masters', [
+            'kode_barang' => 'ITEM-NEW',
+            'barcode' => '899NEWITEM',
+            'nama_barang' => 'Item Baru',
+        ]);
     }
 
     /** @test */

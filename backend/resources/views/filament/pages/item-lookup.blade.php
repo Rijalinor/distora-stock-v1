@@ -112,7 +112,44 @@
                         @endif
                     </dl>
 
-                    <div class="rounded-xl border border-gray-700 bg-gray-950 p-4">
+                    <div
+                        class="rounded-xl border border-gray-700 bg-gray-950 p-4"
+                        x-data="{
+                            pcs: '',
+                            result: '0 {{ $item['calculator']['pcs_label'] }}',
+                            calculator: @js($item['calculator']),
+                            calculate() {
+                                const totalPcs = Math.max(0, parseInt(this.pcs || 0));
+                                const ctnSize = Math.max(1, parseInt(this.calculator.ctn_size || 1));
+                                const ctnLabel = this.calculator.ctn_label || 'CTN';
+                                const pcsLabel = this.calculator.pcs_label || 'PCS';
+
+                                if (totalPcs === 0) {
+                                    this.result = `0 ${pcsLabel}`;
+                                    return;
+                                }
+
+                                if (ctnSize <= 1) {
+                                    this.result = `${totalPcs} ${pcsLabel}`;
+                                    return;
+                                }
+
+                                const ctn = Math.floor(totalPcs / ctnSize);
+                                const pcs = totalPcs % ctnSize;
+                                const parts = [];
+
+                                if (ctn > 0) {
+                                    parts.push(`${ctn} ${ctnLabel}`);
+                                }
+
+                                if (pcs > 0) {
+                                    parts.push(`${pcs} ${pcsLabel}`);
+                                }
+
+                                this.result = parts.join(' ') || `0 ${pcsLabel}`;
+                            },
+                        }"
+                    >
                         <label class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
                             Kalkulator PCS
                         </label>
@@ -120,13 +157,14 @@
                             <x-filament::input
                                 type="number"
                                 min="0"
-                                wire:model.live.debounce.300ms="calculatorPcs.{{ $item['id'] }}"
+                                x-model="pcs"
+                                x-on:input="calculate()"
                                 placeholder="Input total PCS..."
                                 class="text-xl"
                             />
                             <x-filament::input
                                 type="text"
-                                value="{{ $calculatorResults[$item['id']] ?? '0 ' . ($item['qty_labels'][array_key_last($item['qty_labels'])] ?? 'PCS') }}"
+                                x-bind:value="result"
                                 readonly
                                 class="text-lg font-bold"
                             />
