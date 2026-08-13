@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\ItemMaster;
+use App\Services\StockScanningService;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -29,6 +30,12 @@ class ItemLookup extends Page
 
     public bool $searched = false;
 
+    /** @var array<int, int|string> */
+    public array $calculatorPcs = [];
+
+    /** @var array<int, string> */
+    public array $calculatorResults = [];
+
     public static function canAccess(): bool
     {
         $user = Auth::user();
@@ -41,6 +48,8 @@ class ItemLookup extends Page
         $this->barcode = trim($barcode ?? $this->barcode);
         $this->searched = true;
         $this->items = [];
+        $this->calculatorPcs = [];
+        $this->calculatorResults = [];
 
         if ($this->barcode === '') {
             return;
@@ -53,6 +62,7 @@ class ItemLookup extends Page
             ->where(fn ($query) => $query
                 ->where('barcode', $this->barcode)
                 ->orWhere('kode_barang', $this->barcode)
+                ->orWhere('kode_barang', 'like', '%' . $this->barcode . '%')
                 ->orWhereHas('barcodes', fn ($query) => $query->where('barcode', $this->barcode)));
 
         if (! $user->isCentralAdmin()) {
@@ -67,6 +77,8 @@ class ItemLookup extends Page
             'principal' => $item->principal?->nama ?? '-',
             'branch' => $item->branch?->nama ?? '-',
             'unit' => $item->satuan ?: implode('-', $item->getQtyLabelsArray()),
+            'qty_labels' => $item->getQtyLabelsArray(),
+            'qty_factors' => $item->getQtyFactorsArray() ?: StockScanningService::parseConversionFactors($item->nama_barang),
             'structure' => collect($item->qty_structure ?? [])
                 ->map(fn (array $level): string => strtoupper($level['label']) . ' = ' . $level['factor'])
                 ->implode(', '),
@@ -75,9 +87,49 @@ class ItemLookup extends Page
         $this->dispatch($this->items ? 'item-lookup-found' : 'item-lookup-missing');
     }
 
+    public function updatedCalculatorPcs($value, string $key): void
+    {
+        $item = collect($this->items)->firstWhere('id', (int) $key);
+
+        if (! $item) {
+            return;
+        }
+
+        $pcs = max(0, (int) $value);
+        $factor = max(1, (int) ($item['qty_factors'][0] ?? 1));
+        $ctnLabel = $item['qty_labels'][0] ?? 'CTN';
+        $pcsLabel = $item['qty_labels'][array_key_last($item['qty_labels'])] ?? 'PCS';
+
+        if ($pcs === 0) {
+            $this->calculatorResults[$key] = "0 {$pcsLabel}";
+
+            return;
+        }
+
+        if ($factor <= 1) {
+            $this->calculatorResults[$key] = "{$pcs} {$pcsLabel}";
+
+            return;
+        }
+
+        $ctn = intdiv($pcs, $factor);
+        $remainder = $pcs % $factor;
+        $parts = [];
+
+        if ($ctn > 0) {
+            $parts[] = "{$ctn} {$ctnLabel}";
+        }
+
+        if ($remainder > 0) {
+            $parts[] = "{$remainder} {$pcsLabel}";
+        }
+
+        $this->calculatorResults[$key] = implode(' ', $parts);
+    }
+
     public function resetLookup(): void
     {
-        $this->reset(['barcode', 'items', 'searched']);
+        $this->reset(['barcode', 'items', 'searched', 'calculatorPcs', 'calculatorResults']);
         $this->dispatch('item-lookup-ready');
     }
 }

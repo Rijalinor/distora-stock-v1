@@ -49,6 +49,145 @@ class StockOpnameServicesTest extends TestCase
     }
 
     /** @test */
+    public function sync_database_keeps_existing_principal_status()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        Principal::create([
+            'kode' => 'P001',
+            'nama' => 'Principal Lama',
+            'status' => false,
+        ]);
+
+        app(CsvImportService::class)->syncDatabase([
+            new CsvRowData(
+                principalKode: 'P001',
+                principalNama: 'Principal Baru',
+                itemKode: 'ITEM001',
+                itemNama: 'Barang Baru',
+                satuan: 'PCS',
+                qtySistemDisplay: '1 PCS',
+                qtySistemBase: 1,
+            ),
+            new CsvRowData(
+                principalKode: 'P002',
+                principalNama: 'Principal Baru Dibuat',
+                itemKode: 'ITEM002',
+                itemNama: 'Barang Baru 2',
+                satuan: 'PCS',
+                qtySistemDisplay: '1 PCS',
+                qtySistemBase: 1,
+            ),
+        ], $branch->id);
+
+        $this->assertDatabaseHas('principals', [
+            'kode' => 'P001',
+            'nama' => 'Principal Baru',
+            'status' => false,
+        ]);
+        $this->assertDatabaseHas('principals', [
+            'kode' => 'P002',
+            'nama' => 'Principal Baru Dibuat',
+            'status' => true,
+        ]);
+    }
+
+    /** @test */
+    public function item_lookup_calculator_converts_pcs_to_ctn_and_pcs()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'CALC',
+            'nama' => 'Principal Calculator',
+            'status' => true,
+        ]);
+        $item = ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'CALC-001',
+            'nama_barang' => 'Barang Calculator (1X24)',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCS',
+            'qty_structure' => [
+                ['label' => 'CTN', 'factor' => 24],
+                ['label' => 'PCS', 'factor' => 1],
+            ],
+            'status' => true,
+        ]);
+        $user = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
+
+        $this->actingAs($user);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\ItemLookup::class)
+            ->call('searchItem', $item->kode_barang)
+            ->set("calculatorPcs.{$item->id}", 6300)
+            ->assertSet("calculatorResults.{$item->id}", '262 CTN 12 PCS');
+    }
+
+    /** @test */
+    public function item_lookup_calculator_handles_common_carton_sizes()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'CALC-COMMON',
+            'nama' => 'Principal Calculator Common',
+            'status' => true,
+        ]);
+        $user = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
+        $this->actingAs($user);
+
+        foreach ([
+            ['code' => 'CALC-24', 'factor' => 24, 'pcs' => 4200, 'expected' => '175 CTN'],
+            ['code' => 'CALC-24-SISA', 'factor' => 24, 'pcs' => 6300, 'expected' => '262 CTN 12 PCS'],
+            ['code' => 'CALC-36', 'factor' => 36, 'pcs' => 6300, 'expected' => '175 CTN'],
+            ['code' => 'CALC-36-SISA', 'factor' => 36, 'pcs' => 6310, 'expected' => '175 CTN 10 PCS'],
+        ] as $case) {
+            $item = ItemMaster::create([
+                'branch_id' => $branch->id,
+                'kode_barang' => $case['code'],
+                'nama_barang' => "Barang {$case['code']} (1X{$case['factor']})",
+                'principal_id' => $principal->id,
+                'satuan' => 'CTN-PCS',
+                'qty_structure' => [
+                    ['label' => 'CTN', 'factor' => $case['factor']],
+                    ['label' => 'PCS', 'factor' => 1],
+                ],
+                'status' => true,
+            ]);
+
+            \Livewire\Livewire::test(\App\Filament\Pages\ItemLookup::class)
+                ->call('searchItem', $item->kode_barang)
+                ->set("calculatorPcs.{$item->id}", $case['pcs'])
+                ->assertSet("calculatorResults.{$item->id}", $case['expected']);
+        }
+    }
+
+    /** @test */
+    public function item_lookup_calculator_uses_item_name_factor_when_structure_is_empty()
+    {
+        $branch = Branch::where('kode', 'PUSAT')->firstOrFail();
+        $principal = Principal::create([
+            'kode' => 'CALC-FALLBACK',
+            'nama' => 'Principal Calculator Fallback',
+            'status' => true,
+        ]);
+        $item = ItemMaster::create([
+            'branch_id' => $branch->id,
+            'kode_barang' => 'CALC-FALLBACK-001',
+            'nama_barang' => 'Barang Fallback (1X36)',
+            'principal_id' => $principal->id,
+            'satuan' => 'CTN-PCS',
+            'status' => true,
+        ]);
+        $user = User::factory()->create(['role' => UserRole::StockOfficer, 'branch_id' => $branch->id]);
+
+        $this->actingAs($user);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\ItemLookup::class)
+            ->call('searchItem', $item->kode_barang)
+            ->set("calculatorPcs.{$item->id}", 6300)
+            ->assertSet("calculatorResults.{$item->id}", '175 CTN');
+    }
+
+    /** @test */
     public function it_correctly_parses_conversion_factors_from_description()
     {
         $this->assertEquals([36], StockScanningService::parseConversionFactors('BAYGON COIL JMB MAX DB IS 10PSG (1X36)'));

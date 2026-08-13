@@ -207,10 +207,14 @@ class CsvImportService
             }
 
             foreach ($uniquePrincipals as $kode => $nama) {
-                $principal = Principal::updateOrCreate(
-                    ['kode' => $kode],
-                    ['nama' => $nama, 'status' => true]
-                );
+                $principal = Principal::firstOrNew(['kode' => $kode]);
+                $principal->nama = $nama;
+
+                if (! $principal->exists) {
+                    $principal->status = true;
+                }
+
+                $principal->save();
                 $principalsMap[$kode] = $principal->id;
             }
 

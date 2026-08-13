@@ -89,46 +89,50 @@
     <div
         x-show="visible"
         x-cloak
-        class="mx-auto max-w-2xl overflow-hidden rounded-2xl border border-gray-200 bg-gray-950/90 shadow-sm dark:border-gray-700"
+        class="flex bg-black/60"
+        style="position: fixed; inset: 0; z-index: 9999; align-items: flex-start; justify-content: center; padding: 4rem 0.75rem 0.75rem;"
+        x-on:click.self="stopScanner(); visible = false;"
     >
-        <div class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-sm text-gray-200">
-            <span class="font-semibold">Scanner Barcode</span>
-            <button
-                type="button"
-                class="rounded-lg bg-white/10 px-3 py-1 text-sm font-semibold hover:bg-white/20"
-                x-on:click="stopScanner(); visible = false;"
-            >
-                Tutup
-            </button>
-        </div>
+        <div class="w-full overflow-hidden rounded-lg border border-gray-700 bg-gray-950 shadow-xl" style="max-width: 28rem;">
+            <div class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-sm text-gray-200">
+                <span class="font-semibold">Scanner Barcode</span>
+                <button
+                    type="button"
+                    class="rounded-lg bg-white/10 px-3 py-1 text-sm font-semibold hover:bg-white/20"
+                    x-on:click="stopScanner(); visible = false;"
+                >
+                    Tutup
+                </button>
+            </div>
 
-        <div class="relative aspect-video w-full overflow-hidden bg-black">
-            <video x-ref="video" class="h-full w-full object-cover" playsinline muted></video>
+            <div class="relative w-full overflow-hidden bg-black" style="aspect-ratio: 4 / 3;">
+                <video x-ref="video" class="h-full w-full object-cover" playsinline muted></video>
 
-            <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
-                <div class="h-24 w-4/5 max-w-md rounded-xl border-2 border-primary-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)] sm:h-32">
-                    <div class="relative top-1/2 mx-3 border-t border-primary-400/80"></div>
+                <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
+                    <div class="h-20 w-4/5 max-w-sm rounded-lg border-2 border-primary-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)] sm:h-24">
+                        <div class="relative top-1/2 mx-3 border-t border-primary-400/80"></div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <p class="text-sm text-gray-200" x-text="status"></p>
-            <div class="flex gap-2">
-                <button
-                    type="button"
-                    class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-500"
-                    x-on:click="openScanner()"
-                >
-                    Buka Kamera
-                </button>
-                <button
-                    type="button"
-                    class="rounded-lg bg-gray-700 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-600"
-                    x-on:click="stopScanner()"
-                >
-                    Matikan Kamera
-                </button>
+            <div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-gray-200" x-text="status"></p>
+                <div class="flex gap-2">
+                    <button
+                        type="button"
+                        class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-500"
+                        x-on:click="openScanner()"
+                    >
+                        Buka Kamera
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-lg bg-gray-700 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-600"
+                        x-on:click="stopScanner()"
+                    >
+                        Matikan Kamera
+                    </button>
+                </div>
             </div>
         </div>
     </div>
