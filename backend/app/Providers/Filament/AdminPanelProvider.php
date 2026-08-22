@@ -30,7 +30,7 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => $this->themeColor(),
             ])
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->renderHook(
@@ -61,5 +61,27 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ]);
+    }
+
+    private function themeColor(): array
+    {
+        $color = trim((string) config('theme.primary_color', 'Amber'));
+
+        if (preg_match('/^#(?:[0-9a-fA-F]{3}){1,2}$/', $color)) {
+            return Color::hex($color);
+        }
+
+        return match (ucfirst(strtolower($color))) {
+            'Blue' => Color::Blue,
+            'Green' => Color::Green,
+            'Emerald' => Color::Emerald,
+            'Indigo' => Color::Indigo,
+            'Purple' => Color::Purple,
+            'Rose' => Color::Rose,
+            'Red' => Color::Red,
+            'Sky' => Color::Sky,
+            'Teal' => Color::Teal,
+            default => Color::Amber,
+        };
     }
 }

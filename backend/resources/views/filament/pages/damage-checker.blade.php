@@ -4,12 +4,21 @@
     <div
         class="mx-auto w-full max-w-6xl space-y-4 pb-16 sm:space-y-6"
         x-data="{
-            checkedRows: {},
-            toggleRow(key) {
-                this.checkedRows[key] = ! this.checkedRows[key];
+            markedRows: {},
+            storageKey: 'damage-check-marked.{{ $check?->id ?? 'list' }}',
+            init() {
+                try {
+                    this.markedRows = JSON.parse(localStorage.getItem(this.storageKey) || '{}');
+                } catch (error) {
+                    this.markedRows = {};
+                }
             },
-            isChecked(key) {
-                return Boolean(this.checkedRows[key]);
+            toggleRow(id) {
+                this.markedRows[id] = ! this.markedRows[id];
+                localStorage.setItem(this.storageKey, JSON.stringify(this.markedRows));
+            },
+            isMarked(id) {
+                return Boolean(this.markedRows[id]);
             },
         }"
     >
@@ -119,12 +128,23 @@
                             scanning: false,
                             scanLocked: false,
                             flashScan: false,
+                            scanFeedbackVisible: false,
+                            scanFeedbackTimer: null,
                             scanMode: 'santai',
                             lastScanValue: null,
                             lastScanAt: 0,
                             status: 'Kamera belum aktif',
+                            barcodeFormats: ['code_128', 'ean_13', 'ean_8', 'code_39', 'code_93', 'itf', 'upc_a', 'upc_e'],
                             cooldownMs() {
                                 return 2000;
+                            },
+                            showScanFeedback() {
+                                clearTimeout(this.scanFeedbackTimer);
+                                this.scanFeedbackVisible = false;
+                                this.$nextTick(() => {
+                                    this.scanFeedbackVisible = true;
+                                    this.scanFeedbackTimer = setTimeout(() => this.scanFeedbackVisible = false, 1800);
+                                });
                             },
                             beep(frequency = 900, duration = 90) {
                                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -155,7 +175,7 @@
 
                                 try {
                                     this.detector = new BarcodeDetector({
-                                        formats: ['code_128', 'ean_13', 'ean_8', 'code_39', 'code_93', 'itf', 'upc_a', 'upc_e'],
+                                        formats: this.barcodeFormats,
                                     });
                                     this.stream = await navigator.mediaDevices.getUserMedia({
                                         video: { facingMode: { ideal: 'environment' } },
@@ -180,7 +200,8 @@
 
                                 try {
                                     const codes = await this.detector.detect(this.$refs.video);
-                                    const value = codes[0]?.rawValue?.trim();
+                                    const code = codes.find((code) => this.barcodeFormats.includes(code.format));
+                                    const value = code?.rawValue?.trim();
 
                                     if (! value) {
                                         requestAnimationFrame(() => this.scanFrame());
@@ -228,6 +249,8 @@
                                 this.status = 'Kamera dimatikan';
                             },
                         }"
+                        x-on:damage-scan-success.window="showScanFeedback()"
+                        x-on:damage-scan-failed.window="showScanFeedback()"
                         class="space-y-4"
                     >
                         <div class="overflow-hidden rounded-xl border border-gray-200 bg-black dark:border-gray-700" style="aspect-ratio: 16 / 9;">
@@ -258,8 +281,23 @@
                             </form>
 
                             @if ($scanFeedback)
-                                <div class="rounded-lg border border-success-200 bg-success-50 px-3 py-2 text-sm font-semibold text-success-700 dark:border-success-800 dark:bg-success-950/20 dark:text-success-300">
-                                    Terakhir scan: {{ $scanFeedback }}
+                                <div
+                                    x-show="scanFeedbackVisible"
+                                    x-cloak
+                                    x-transition:enter="transition ease-out duration-300"
+                                    x-transition:enter-start="opacity-0 scale-75 -translate-y-2"
+                                    x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                                    x-transition:leave="transition ease-in duration-200"
+                                    x-transition:leave-start="opacity-100 scale-100"
+                                    x-transition:leave-end="opacity-0 scale-95"
+                                    @class([
+                                        'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold shadow-sm',
+                                        'border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/30 dark:text-green-300' => $scanFeedbackType === 'success',
+                                        'border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300' => $scanFeedbackType === 'danger',
+                                    ])
+                                >
+                                    <x-filament::icon :icon="$scanFeedbackType === 'success' ? 'heroicon-m-check-circle' : 'heroicon-m-x-circle'" class="h-5 w-5 shrink-0" />
+                                    <span>{{ $scanFeedbackType === 'success' ? 'Berhasil tercatat:' : 'Gagal tercatat:' }} {{ $scanFeedback }}</span>
                                 </div>
                             @endif
 
@@ -399,45 +437,6 @@
                     />
                 </div>
 
-                @if ($itemsData['latestItem'])
-                    @php($latest = $itemsData['latestItem'])
-                    <div class="mb-3 rounded-lg border border-primary-200 bg-primary-50 p-3 dark:border-primary-800 dark:bg-primary-950/30">
-                        <div class="text-xs font-semibold uppercase text-primary-700 dark:text-primary-300">Scan Terakhir</div>
-                        <div class="mt-2 divide-y divide-primary-100 dark:divide-primary-900">
-                                <div class="py-2 first:pt-0 last:pb-0">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div class="min-w-0">
-                                            <div class="break-words text-sm font-semibold leading-snug">{{ $latest->itemMaster->nama_barang }}</div>
-                                            <div class="mt-0.5 truncate font-mono text-xs text-gray-600 dark:text-gray-400">
-                                                {{ $latest->itemMaster->principal?->nama ?: 'Tanpa prinsipal' }} · {{ $latest->itemMaster->kode_barang }}
-                                            </div>
-                                            <div class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">{{ $latest->lastScanner?->name ? 'Oleh ' . $latest->lastScanner->name : 'Scan terakhir' }}</div>
-                                        </div>
-                                        <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                                            @if ($check->status === \App\Enums\DamageCheckStatus::Open)
-                                                <button type="button" wire:click="changeQuantity({{ $latest->id }}, -1)" @disabled($latest->qty_rusak_base <= 1) class="flex shrink-0 items-center justify-center rounded-lg text-xl font-bold text-white disabled:opacity-40" style="width: 40px; height: 40px; background-color: #f59e0b;">−</button>
-                                            @endif
-                                            <div class="min-w-16 text-center text-sm font-bold text-primary-700 dark:text-primary-300">{{ $latest->qty_rusak_display }}</div>
-                                            @if ($check->status === \App\Enums\DamageCheckStatus::Open)
-                                                <button type="button" wire:click="changeQuantity({{ $latest->id }}, 1)" class="flex shrink-0 items-center justify-center rounded-lg text-xl font-bold text-white" style="width: 40px; height: 40px; background-color: #16a34a;">+</button>
-                                                <div x-data="{ open: false }" class="flex shrink-0 items-center gap-1">
-                                                    <button type="button" x-on:click="open = ! open" class="flex items-center justify-center rounded-lg text-sm font-black text-white" style="width:40px;height:40px;background:#0d9488">++</button>
-                                                    <div x-show="open" x-transition class="flex items-center gap-1">
-                                                        <x-filament::input type="number" min="1" wire:model="bulkQty.{{ $latest->id }}" class="w-20 text-center font-bold" />
-                                                        <button type="button" wire:click="addBulkQuantity({{ $latest->id }})" class="rounded-lg px-3 text-sm font-bold text-white" style="height:40px;background:#0d9488">Tambah</button>
-                                                    </div>
-                                                </div>
-                                                <button type="button" aria-label="Hapus salah scan" x-on:click.prevent="if (confirm('Hapus item salah scan ini?')) $wire.deleteItem({{ $latest->id }})" class="flex shrink-0 items-center justify-center rounded-lg text-white" style="width: 40px; height: 40px; background-color: #dc2626;">
-                                                    <x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" />
-                                                </button>
-                                            @endif
-                                        </div>
-                                    </div>
-                                </div>
-                        </div>
-                    </div>
-                @endif
-
                 <div class="mb-2 text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Daftar tersusun</div>
                 <div class="space-y-2">
                     @forelse ($itemsData['items']->groupBy(fn ($row) => $row->itemMaster->principal?->nama ?: 'Tanpa prinsipal') as $principalName => $principalRows)
@@ -449,9 +448,9 @@
                             <div x-show="open" class="space-y-2 border-t border-gray-100 p-3 dark:border-gray-800">
                                 @foreach ($principalRows as $row)
                         <div
-                            class="rounded-lg border border-gray-200 p-3 transition dark:border-gray-700"
-                            x-on:click="toggleRow('item-{{ $row->id }}')"
-                            x-bind:style="isChecked('item-{{ $row->id }}') ? 'background-color: rgba(37, 99, 235, 0.22); border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f6;' : ''"
+                            x-on:click="toggleRow({{ $row->id }})"
+                            x-bind:style="isMarked({{ $row->id }}) ? 'background-color: rgba(37, 99, 235, 0.24); border-color: #60a5fa; box-shadow: 0 0 0 2px #3b82f6;' : 'border-color: rgb(55 65 81);'"
+                            class="cursor-pointer rounded-lg border p-3 transition"
                         >
                             <div class="min-w-0">
                                 <div class="break-words text-sm font-semibold leading-snug">{{ $row->itemMaster->nama_barang }}</div>
@@ -463,19 +462,25 @@
 
                             <div class="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-2 dark:border-gray-800" x-on:click.stop>
                                 @if ($check->status === \App\Enums\DamageCheckStatus::Open)
-                                    <button type="button" wire:click="changeQuantity({{ $row->id }}, -1)" @disabled($row->qty_rusak_base <= 1) class="flex shrink-0 items-center justify-center rounded-lg text-xl font-bold text-white disabled:opacity-40" style="width: 44px; height: 44px; background-color: #f59e0b;">−</button>
+                                    <button type="button" wire:click="changeQuantity({{ $row->id }}, -1)" @disabled($row->qty_rusak_base <= 1) class="flex shrink-0 items-center justify-center rounded-lg bg-warning-500 text-xl font-bold text-white disabled:opacity-40" style="width: 44px; height: 44px;">−</button>
                                 @endif
                                 <div class="min-w-16 text-center text-base font-bold">{{ $row->qty_rusak_display }}</div>
                                 @if ($check->status === \App\Enums\DamageCheckStatus::Open)
-                                    <button type="button" wire:click="changeQuantity({{ $row->id }}, 1)" class="flex shrink-0 items-center justify-center rounded-lg text-xl font-bold text-white" style="width: 44px; height: 44px; background-color: #16a34a;">+</button>
-                                    <div x-data="{ open: false }" class="flex shrink-0 items-center gap-1">
-                                        <button type="button" x-on:click="open = ! open" class="flex items-center justify-center rounded-lg text-sm font-black text-white" style="width:44px;height:44px;background:#0d9488">++</button>
-                                        <div x-show="open" x-transition class="flex items-center gap-1">
-                                            <x-filament::input type="number" min="1" wire:model="bulkQty.{{ $row->id }}" class="w-20 text-center font-bold" />
-                                            <button type="button" wire:click="addBulkQuantity({{ $row->id }})" class="rounded-lg px-3 text-sm font-bold text-white" style="height:44px;background:#0d9488">Tambah</button>
+                                    <button type="button" wire:click="changeQuantity({{ $row->id }}, 1)" class="flex shrink-0 items-center justify-center rounded-lg bg-primary-600 text-xl font-bold text-white" style="width: 44px; height: 44px;">+</button>
+                                    <x-filament::modal width="xs">
+                                        <x-slot name="trigger">
+                                            <button type="button" class="flex items-center justify-center rounded-lg bg-primary-600 text-sm font-black text-white" style="width:44px;height:44px">++</button>
+                                        </x-slot>
+
+                                        <x-slot name="heading">Tambah Qty</x-slot>
+
+                                        <div class="space-y-3">
+                                            <div class="break-words text-sm font-semibold">{{ $row->itemMaster->nama_barang }}</div>
+                                            <x-filament::input type="number" min="1" wire:model="bulkQty.{{ $row->id }}" class="text-center text-lg font-bold" />
+                                            <x-filament::button type="button" wire:click="addBulkQuantity({{ $row->id }})" class="w-full">Tambah</x-filament::button>
                                         </div>
-                                    </div>
-                                    <button type="button" aria-label="Hapus salah scan" x-on:click.prevent="if (confirm('Hapus item salah scan ini?')) $wire.deleteItem({{ $row->id }})" class="flex shrink-0 items-center justify-center rounded-lg text-white" style="width: 44px; height: 44px; background-color: #dc2626;">
+                                    </x-filament::modal>
+                                    <button type="button" aria-label="Hapus salah scan" x-on:click.prevent="if (confirm('Hapus item salah scan ini?')) $wire.deleteItem({{ $row->id }})" class="flex shrink-0 items-center justify-center rounded-lg bg-danger-600 text-white" style="width: 44px; height: 44px;">
                                         <x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" />
                                     </button>
                                 @endif
@@ -506,18 +511,24 @@
                                 <div class="text-sm font-semibold">{{ $row->pendingItem->item_name }}</div>
                                 <div class="font-mono text-xs text-gray-500">{{ $row->pendingItem->barcode }} · {{ $row->pendingItem->temporary_code }}</div>
                                 <div class="mt-2 flex items-center justify-end gap-2 border-t pt-2 dark:border-gray-800">
-                                    @if ($check->status === \App\Enums\DamageCheckStatus::Open)<button type="button" wire:click="changePendingQuantity({{ $row->id }}, -1)" @disabled($row->qty_rusak_base <= 1) class="rounded-lg text-xl font-bold text-white disabled:opacity-40" style="width:44px;height:44px;background:#f59e0b">−</button>@endif
+                                    @if ($check->status === \App\Enums\DamageCheckStatus::Open)<button type="button" wire:click="changePendingQuantity({{ $row->id }}, -1)" @disabled($row->qty_rusak_base <= 1) class="rounded-lg bg-warning-500 text-xl font-bold text-white disabled:opacity-40" style="width:44px;height:44px">−</button>@endif
                                     <div class="min-w-16 text-center font-bold">{{ $row->qty_rusak_display }}</div>
                                     @if ($check->status === \App\Enums\DamageCheckStatus::Open)
-                                        <button type="button" wire:click="changePendingQuantity({{ $row->id }}, 1)" class="rounded-lg text-xl font-bold text-white" style="width:44px;height:44px;background:#16a34a">+</button>
-                                        <div x-data="{ open: false }" class="flex shrink-0 items-center gap-1">
-                                            <button type="button" x-on:click="open = ! open" class="flex items-center justify-center rounded-lg text-sm font-black text-white" style="width:44px;height:44px;background:#0d9488">++</button>
-                                            <div x-show="open" x-transition class="flex items-center gap-1">
-                                                <x-filament::input type="number" min="1" wire:model="bulkQty.pending-{{ $row->id }}" class="w-20 text-center font-bold" />
-                                                <button type="button" wire:click="addBulkPendingQuantity({{ $row->id }})" class="rounded-lg px-3 text-sm font-bold text-white" style="height:44px;background:#0d9488">Tambah</button>
+                                        <button type="button" wire:click="changePendingQuantity({{ $row->id }}, 1)" class="rounded-lg bg-primary-600 text-xl font-bold text-white" style="width:44px;height:44px">+</button>
+                                        <x-filament::modal width="xs">
+                                            <x-slot name="trigger">
+                                                <button type="button" class="flex items-center justify-center rounded-lg bg-primary-600 text-sm font-black text-white" style="width:44px;height:44px">++</button>
+                                            </x-slot>
+
+                                            <x-slot name="heading">Tambah Qty</x-slot>
+
+                                            <div class="space-y-3">
+                                                <div class="break-words text-sm font-semibold">{{ $row->pendingItem->item_name }}</div>
+                                                <x-filament::input type="number" min="1" wire:model="bulkQty.pending-{{ $row->id }}" class="text-center text-lg font-bold" />
+                                                <x-filament::button type="button" wire:click="addBulkPendingQuantity({{ $row->id }})" class="w-full">Tambah</x-filament::button>
                                             </div>
-                                        </div>
-                                        <button type="button" x-on:click.prevent="if(confirm('Hapus item ini?')) $wire.deletePendingItem({{ $row->id }})" class="inline-flex items-center justify-center rounded-lg text-white" style="width:44px;height:44px;background:#dc2626"><x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" /></button>
+                                        </x-filament::modal>
+                                        <button type="button" x-on:click.prevent="if(confirm('Hapus item ini?')) $wire.deletePendingItem({{ $row->id }})" class="inline-flex items-center justify-center rounded-lg bg-danger-600 text-white" style="width:44px;height:44px"><x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" /></button>
                                     @endif
                                 </div>
                             </div>

@@ -54,6 +54,7 @@ class DamageChecker extends Page
     public int $pendingQtyPerScan = 1;
     public string $pendingNotes = '';
     public string $scanFeedback = '';
+    public string $scanFeedbackType = 'success';
 
     /** @var array<int, array{id:int, code:string, name:string, principal:string, qty_base:int, unit:string}> */
     public array $scanCandidates = [];
@@ -69,7 +70,7 @@ class DamageChecker extends Page
         } elseif ($this->selectedCheckId && Auth::user()?->isStockOfficer()) {
             $check = $this->getSelectedCheck();
 
-            if ($check?->status === DamageCheckStatus::Open && ! $check->checkers()->whereKey(Auth::id())->exists()) {
+            if ($check?->status === DamageCheckStatus::Open && (int) $check->officer_id !== (int) Auth::id()) {
                 $this->pendingJoinCheckId = $check->id;
                 $this->selectedCheckId = null;
                 session()->forget(self::SESSION_KEY);
@@ -113,7 +114,7 @@ class DamageChecker extends Page
         $check = $this->accessibleChecks()->whereKey($id)->firstOrFail();
 
         if (Auth::user()?->isStockOfficer() && $check->status === DamageCheckStatus::Open) {
-            if (! $check->checkers()->whereKey(Auth::id())->exists()) {
+            if ((int) $check->officer_id !== (int) Auth::id()) {
                 $this->pendingJoinCheckId = $check->id;
                 $this->joinPin = '';
 
@@ -221,6 +222,7 @@ class DamageChecker extends Page
                 $row = app(DamageCheckService::class)->scanPending($check, $pending, Auth::user());
                 $this->barcode = '';
                 $this->scanFeedback = "{$pending->item_name} - total {$row->qty_rusak_display}";
+                $this->scanFeedbackType = 'success';
                 $this->forgetSelectedCheckCache();
                 $this->dispatch('damage-scan-success');
                 return;
@@ -229,6 +231,8 @@ class DamageChecker extends Page
             $this->pendingBarcode = $this->barcode;
             $this->barcode = '';
             $this->showPendingForm = true;
+            $this->scanFeedback = "Barcode {$this->pendingBarcode} belum ada. Lengkapi data barang pending.";
+            $this->scanFeedbackType = 'danger';
             $this->dispatch('damage-scan-failed');
 
             return;
@@ -384,7 +388,7 @@ class DamageChecker extends Page
     public function getItemsData(): array
     {
         if (! $this->selectedCheckId) {
-            return ['items' => collect(), 'latestItem' => null, 'total' => 0];
+            return ['items' => collect(), 'total' => 0];
         }
 
         $query = DamageCheckItem::query()
@@ -409,7 +413,6 @@ class DamageChecker extends Page
                 ->orderBy('damage_check_items.id')
                 ->limit($this->itemsLimit)
                 ->get(),
-            'latestItem' => (clone $query)->orderByDesc('last_scanned_at')->orderByDesc('id')->first(),
             'total' => $query->count(),
         ];
     }
@@ -481,6 +484,7 @@ class DamageChecker extends Page
         $row = app(DamageCheckService::class)->scan($this->getSelectedCheck(), $item, Auth::user(), $scanQtyBase);
         $this->reset(['barcode', 'scanCandidates']);
         $this->scanFeedback = "{$row->itemMaster->nama_barang} - total {$row->qty_rusak_display}";
+        $this->scanFeedbackType = 'success';
         $this->forgetSelectedCheckCache();
         $this->dispatch('damage-scan-success');
     }

@@ -196,6 +196,38 @@ class DamageCheckTest extends TestCase
     }
 
     #[Test]
+    public function joined_checker_must_enter_pin_again_when_reopening_open_check(): void
+    {
+        [$owner] = $this->makeOfficerAndItem();
+        $checker = User::factory()->create([
+            'role' => UserRole::StockOfficer,
+            'branch_id' => $owner->branch_id,
+        ]);
+        $service = app(DamageCheckService::class);
+        $check = $service->create([
+            'check_date' => today()->toDateString(),
+            'branch_id' => $owner->branch_id,
+            'principal_id' => null,
+            'location' => 'Gudang Bersama',
+            'notes' => null,
+            'join_pin' => '5678',
+        ], $owner);
+        $service->join($check, $checker, '5678');
+
+        $this->actingAs($checker)->withSession(['damage_checker.selected_check_id' => $check->id]);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\DamageChecker::class)
+            ->assertSet('selectedCheckId', null)
+            ->assertSet('pendingJoinCheckId', $check->id)
+            ->call('selectCheck', $check->id)
+            ->assertSet('selectedCheckId', null)
+            ->assertSet('pendingJoinCheckId', $check->id)
+            ->set('joinPin', '5678')
+            ->call('submitJoin')
+            ->assertSet('selectedCheckId', $check->id);
+    }
+
+    #[Test]
     public function package_barcodes_add_their_configured_piece_quantity(): void
     {
         [$officer, $item] = $this->makeOfficerAndItem();
