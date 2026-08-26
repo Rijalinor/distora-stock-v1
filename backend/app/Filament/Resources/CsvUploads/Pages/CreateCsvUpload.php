@@ -64,14 +64,22 @@ class CreateCsvUpload extends CreateRecord
                 ->success()
                 ->send();
         } catch (\Throwable $e) {
+            // Sanitize error message to prevent cascading encoding issues
+            $errorMessage = mb_convert_encoding(
+                preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\x80-\x9F]/', '?', $e->getMessage()),
+                'UTF-8',
+                'UTF-8'
+            );
+            $errorMessage = mb_substr($errorMessage, 0, 500);
+
             $this->record->update([
                 'status' => CsvUploadStatus::Failed,
-                'notes' => $e->getMessage(),
+                'notes' => $errorMessage,
             ]);
 
             Notification::make()
                 ->title('Gagal memproses CSV')
-                ->body($e->getMessage())
+                ->body($errorMessage)
                 ->danger()
                 ->send();
 

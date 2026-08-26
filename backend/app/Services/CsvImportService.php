@@ -14,17 +14,58 @@ use Illuminate\Support\Facades\Log;
 class CsvImportService
 {
     /**
-     * Parse the CSV file and return a preview result.
-     *
-     * @param string $filePath
-     * @return CsvPreviewResult
-     * @throws \Exception
+     * Sanitize a string for safe database storage.
+     * Converts non-UTF8 characters and replaces non-breaking spaces.
      */
+    public static function sanitizeString(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        // Replace non-breaking space (\xC2\xA0 in UTF-8, \xA0 in Latin-1) with regular space
+        $value = str_replace(["\xC2\xA0", "\xA0"], ' ', $value);
+
+        // Remove other non-printable characters except newline/tab
+        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
+
+        // Ensure valid UTF-8 — strip any remaining invalid sequences
+        $value = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+
+        return trim($value);
+    }
+
+    /**
+     * Ensure a CSV file is UTF-8 encoded. Converts from common encodings if needed.
+     * Returns the path to the (possibly converted) file.
+     */
+    private function ensureUtf8(string $filePath): string
+    {
+        $content = file_get_contents($filePath);
+
+        // Remove BOM if present
+        $content = str_replace("\xEF\xBB\xBF", '', $content);
+
+        // Detect encoding
+        $encoding = mb_detect_encoding($content, ['UTF-8', 'Windows-1252', 'ISO-8859-1', 'ASCII'], true);
+
+        if ($encoding && $encoding !== 'UTF-8') {
+            $content = mb_convert_encoding($content, 'UTF-8', $encoding);
+            file_put_contents($filePath, $content);
+            Log::info("CSV file converted from {$encoding} to UTF-8: {$filePath}");
+        }
+
+        return $filePath;
+    }
+
     public function parseAndPreview(string $filePath): CsvPreviewResult
     {
         if (!file_exists($filePath)) {
             throw new \Exception("File not found at: {$filePath}");
         }
+
+        // Ensure file is UTF-8 encoded
+        $this->ensureUtf8($filePath);
 
         $handle = fopen($filePath, 'r');
         if (!$handle) {
@@ -38,8 +79,8 @@ class CsvImportService
             throw new \Exception("CSV file is empty or invalid.");
         }
 
-        // Trim headers
-        $headers = array_map(fn($h) => trim($h), $headers);
+        // Trim and sanitize headers
+        $headers = array_map(fn($h) => trim(self::sanitizeString($h) ?? ''), $headers);
 
         // Required columns validation
         $requiredColumns = [
@@ -71,13 +112,13 @@ class CsvImportService
 
             $data = array_combine($headers, array_slice($row, 0, count($headers)));
 
-            $principalKode = trim($data['Principle#']);
-            $principalNama = trim($data['Principle Description']);
-            $itemKodeRaw = trim($data['Item#']);
+            $principalKode = self::sanitizeString(trim($data['Principle#']));
+            $principalNama = self::sanitizeString(trim($data['Principle Description']));
+            $itemKodeRaw = self::sanitizeString(trim($data['Item#']));
             // Trim trailing dot from item code
             $itemKode = rtrim($itemKodeRaw, '.');
-            $itemNama = trim($data['Item Description']);
-            $satuan = trim($data['Size']) ?: null;
+            $itemNama = self::sanitizeString(trim($data['Item Description']));
+            $satuan = self::sanitizeString(trim($data['Size'])) ?: null;
             $onHandRaw = $data['OnHand'];
             $onHandBaseRaw = $data['OnHand Base'];
 
