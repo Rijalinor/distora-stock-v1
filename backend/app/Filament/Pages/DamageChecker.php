@@ -444,7 +444,9 @@ class DamageChecker extends Page
     {
         return $this->accessibleChecks()
             ->with(['branch', 'principal', 'officer'])
-            ->withCount('items')
+            ->withCount(['items', 'pendingItems', 'checkers'])
+            ->withSum('items', 'qty_rusak_base')
+            ->withSum('pendingItems', 'qty_rusak_base')
             ->latest('id')
             ->limit(15)
             ->get();

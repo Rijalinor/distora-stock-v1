@@ -32,6 +32,6 @@ class DamageCheckItem extends Model
 
     public function lastScanner()
     {
-        return $this->belongsTo(User::class, 'last_scanned_by');
+        return $this->belongsTo(User::class, 'last_scanned_by')->withTrashed();
     }
 }

@@ -15,5 +15,5 @@ class DamageCheckPendingItem extends Model
 
     public function damageCheck() { return $this->belongsTo(DamageCheck::class); }
     public function pendingItem() { return $this->belongsTo(PendingItem::class); }
-    public function lastScanner() { return $this->belongsTo(User::class, 'last_scanned_by'); }
+    public function lastScanner() { return $this->belongsTo(User::class, 'last_scanned_by')->withTrashed(); }
 }

@@ -1,5 +1,7 @@
 <x-filament-panels::page>
-    @php($check = $this->getSelectedCheck())
+    @php
+        $check = $this->getSelectedCheck();
+    @endphp
 
     <div
         class="mx-auto w-full max-w-6xl space-y-4 pb-16 sm:space-y-6"
@@ -100,21 +102,67 @@
                     </form>
                 @endif
 
-                <div class="grid gap-3">
+                <div class="grid gap-3 sm:grid-cols-1 md:grid-cols-2">
                     @forelse ($this->getRecentChecks() as $recent)
-                        <button type="button" wire:click="selectCheck({{ $recent->id }})" class="rounded-xl border border-gray-200 p-4 text-left hover:border-primary-500 dark:border-gray-700">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <div class="font-semibold">{{ $recent->reference_number }}</div>
-                                    <div class="text-sm text-gray-500">{{ $recent->branch->nama }} · {{ $recent->location }} · {{ $recent->officer->name }}</div>
+                        @php
+                            $totalItems = $recent->items_count + $recent->pending_items_count;
+                            $totalPcs = ($recent->items_sum_qty_rusak_base ?? 0) + ($recent->pending_items_sum_qty_rusak_base ?? 0);
+                            $isOpen = $recent->status === \App\Enums\DamageCheckStatus::Open;
+                        @endphp
+                        <button
+                            type="button"
+                            wire:click="selectCheck({{ $recent->id }})"
+                            class="flex w-full flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary-500 hover:bg-primary-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary-500 dark:hover:bg-primary-950/20"
+                        >
+                            <div class="flex items-start justify-between gap-3 w-full">
+                                <div class="space-y-1">
+                                    <div class="flex items-center gap-2 font-mono text-sm font-semibold text-gray-950 dark:text-white">
+                                        <x-filament::icon icon="heroicon-m-document-text" class="h-4 w-4 text-primary-500" />
+                                        <span>{{ $recent->reference_number }}</span>
+                                    </div>
+                                    <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                        <span class="inline-flex items-center gap-1 font-semibold text-gray-700 dark:text-gray-300">
+                                            <x-filament::icon icon="heroicon-m-building-office" class="h-3.5 w-3.5 text-gray-400" />
+                                            {{ $recent->branch->nama }}
+                                        </span>
+                                        <span>•</span>
+                                        <span class="inline-flex items-center gap-1">
+                                            <x-filament::icon icon="heroicon-m-map-pin" class="h-3.5 w-3.5 text-gray-400" />
+                                            {{ $recent->location }}
+                                        </span>
+                                    </div>
+                                    @if ($recent->notes)
+                                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 italic line-clamp-1">
+                                            Ket: {{ $recent->notes }}
+                                        </div>
+                                    @endif
                                 </div>
-                                <x-filament::badge :color="$recent->status === \App\Enums\DamageCheckStatus::Open ? 'warning' : 'success'">
-                                    {{ $recent->status === \App\Enums\DamageCheckStatus::Open ? 'Ketuk untuk bergabung' : 'Selesai' }} · {{ $recent->checkers_count }}/5 checker · {{ $recent->items_count }} item
+                                <x-filament::badge :color="$isOpen ? 'warning' : 'success'" size="sm" class="shrink-0 font-medium">
+                                    {{ $isOpen ? 'Ketuk untuk bergabung' : 'Selesai' }}
                                 </x-filament::badge>
+                            </div>
+
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400 w-full">
+                                <div class="flex items-center gap-1.5">
+                                    <x-filament::icon icon="heroicon-m-user" class="h-3.5 w-3.5 text-gray-400" />
+                                    <span>Petugas: <strong class="text-gray-800 dark:text-gray-200">{{ $recent->officer?->name ?? 'User Terhapus' }}</strong></span>
+                                </div>
+                                <div class="flex items-center gap-3 font-medium">
+                                    <span class="flex items-center gap-1">
+                                        <x-filament::icon icon="heroicon-m-users" class="h-3.5 w-3.5 text-gray-400" />
+                                        {{ $recent->checkers_count }}/5
+                                    </span>
+                                    <span class="flex items-center gap-1 text-primary-600 dark:text-primary-400 font-bold">
+                                        <x-filament::icon icon="heroicon-m-cube" class="h-3.5 w-3.5" />
+                                        {{ $totalItems }} jenis ({{ $totalPcs }} PCS)
+                                    </span>
+                                </div>
                             </div>
                         </button>
                     @empty
-                        <div class="text-sm text-gray-500">Belum ada pemeriksaan barang rusak.</div>
+                        <div class="col-span-full rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500 dark:border-gray-700">
+                            Belum ada pemeriksaan barang rusak.
+                        </div>
                     @endforelse
                 </div>
             </x-filament::section>
@@ -456,7 +504,7 @@
                                 <div class="break-words text-sm font-semibold leading-snug">{{ $row->itemMaster->nama_barang }}</div>
                                 <div class="mt-0.5 truncate font-mono text-xs text-gray-500">{{ $row->itemMaster->principal?->nama ?: 'Tanpa prinsipal' }} · {{ $row->itemMaster->kode_barang }} · {{ $row->itemMaster->barcode ?: 'Tanpa barcode' }}</div>
                                 @if ($row->lastScanner)
-                                    <div class="mt-0.5 text-xs text-gray-500">Scan terakhir: {{ $row->lastScanner->name }}</div>
+                                    <div class="mt-0.5 text-xs text-gray-500">Scan terakhir: {{ $row->lastScanner?->name ?? 'User Terhapus' }}</div>
                                 @endif
                             </div>
 

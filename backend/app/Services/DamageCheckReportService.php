@@ -75,7 +75,7 @@ class DamageCheckReportService
                     $check->branch->nama,
                     $check->location,
                     $check->principal?->nama ?? 'Semua principal',
-                    $check->officer->name,
+                    $check->officer?->name ?? 'User Terhapus',
                     $row->lastScanner?->name ?? '-',
                     $check->status->value,
                     $row->itemMaster->principal?->nama ?? '-',
@@ -91,7 +91,7 @@ class DamageCheckReportService
                 $check = $row->damageCheck;
                 fputcsv($stream, [
                     $check->reference_number, $check->check_date->format('Y-m-d'), $check->branch->nama,
-                    $check->location, $check->principal?->nama ?? 'Semua principal', $check->officer->name,
+                    $check->location, $check->principal?->nama ?? 'Semua principal', $check->officer?->name ?? 'User Terhapus',
                     $row->lastScanner?->name ?? '-', $check->status->value,
                     $row->pendingItem->principal?->nama ?? 'Belum diketahui',
                     '="' . str_replace('"', '""', $row->pendingItem->barcode) . '"',

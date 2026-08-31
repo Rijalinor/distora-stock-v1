@@ -44,12 +44,12 @@ class DamageCheck extends Model
 
     public function officer()
     {
-        return $this->belongsTo(User::class, 'officer_id');
+        return $this->belongsTo(User::class, 'officer_id')->withTrashed();
     }
 
     public function checkers()
     {
-        return $this->belongsToMany(User::class)->withTimestamps();
+        return $this->belongsToMany(User::class)->withTrashed()->withTimestamps();
     }
 
     public function items()
