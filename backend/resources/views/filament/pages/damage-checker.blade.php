@@ -25,31 +25,159 @@
         }"
     >
         @if (! $check)
-            <x-filament::section>
-                <x-slot name="heading">Header Pemeriksaan Baru</x-slot>
-                <x-slot name="description">Isi header sebelum mulai memindai barang rusak.</x-slot>
+            @if ($pendingJoinCheckId)
+                <form wire:submit="submitJoin" class="mb-4 rounded-xl border border-warning-300 bg-warning-50 p-4 dark:border-warning-800 dark:bg-warning-950/20">
+                    <div class="font-semibold">Masukkan PIN pemeriksaan</div>
+                    <div class="mt-1 text-sm text-gray-500">PIN diberikan oleh pembuat header.</div>
+                    <div class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                        <x-filament::input type="password" inputmode="numeric" wire:model="joinPin" placeholder="PIN 4–6 angka" autocomplete="one-time-code" />
+                        <x-filament::button type="submit" icon="heroicon-m-lock-open" class="w-full sm:w-auto">Gabung</x-filament::button>
+                        <x-filament::button type="button" color="gray" wire:click="cancelJoin" class="w-full sm:w-auto">Batal</x-filament::button>
+                    </div>
+                    @error('joinPin') <div class="mt-1 text-sm text-danger-600">PIN harus terdiri dari 4–6 angka.</div> @enderror
+                </form>
+            @endif
 
-                <form wire:submit="createCheck" class="grid gap-4 md:grid-cols-2">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="relative flex-1">
+                    <x-filament::input
+                        type="search"
+                        wire:model.live.debounce.300ms="checksSearch"
+                        placeholder="Cari referensi, lokasi, cabang, atau principal..."
+                    />
+                </div>
+                <div class="flex items-center gap-2">
+                    <x-filament::input.wrapper>
+                        <x-filament::input.select wire:model.live="checksFilterStatus">
+                            <option value="">Semua Status</option>
+                            <option value="open">Dalam Proses</option>
+                            <option value="completed">Selesai</option>
+                        </x-filament::input.select>
+                    </x-filament::input.wrapper>
+                    <x-filament::button
+                        wire:click="openCreateModal"
+                        color="warning"
+                        icon="heroicon-m-plus"
+                        class="shrink-0"
+                    >
+                        Buat Pemeriksaan Baru
+                    </x-filament::button>
+                </div>
+            </div>
+
+            @php
+                $checksPaginator = $this->getChecksPaginated();
+            @endphp
+
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm" style="table-layout: auto;">
+                        <thead>
+                            <tr class="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+                                <th class="whitespace-nowrap px-4 py-3">Referensi</th>
+                                <th class="whitespace-nowrap px-4 py-3">Tanggal</th>
+                                <th class="whitespace-nowrap px-4 py-3">Cabang</th>
+                                <th class="whitespace-nowrap px-4 py-3">Lokasi</th>
+                                <th class="whitespace-nowrap px-4 py-3">Petugas</th>
+                                <th class="whitespace-nowrap px-4 py-3 text-center">Item</th>
+                                <th class="whitespace-nowrap px-4 py-3 text-center">Status</th>
+                                <th class="px-4 py-3"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                            @forelse ($checksPaginator as $row)
+                                @php
+                                    $totalItems = $row->items_count + $row->pending_items_count;
+                                    $totalPcs = ($row->items_sum_qty_rusak_base ?? 0) + ($row->pending_items_sum_qty_rusak_base ?? 0);
+                                    $isOpen = $row->status === \App\Enums\DamageCheckStatus::Open;
+                                @endphp
+                                <tr class="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <td class="whitespace-nowrap px-4 py-3 font-mono text-xs font-semibold text-gray-950 dark:text-white">
+                                        {{ $row->reference_number }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">
+                                        {{ $row->check_date->format('d M Y') }}
+                                    </td>
+                                    <td class="px-4 py-3 text-gray-600 dark:text-gray-400">
+                                        {{ $row->branch->nama }}
+                                    </td>
+                                    <td class="px-4 py-3 text-gray-600 dark:text-gray-400">
+                                        {{ $row->location }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">
+                                        {{ $row->officer?->name ?? '-' }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-center">
+                                        <span class="font-semibold text-gray-900 dark:text-white">{{ $totalItems }}</span>
+                                        <span class="text-gray-500 dark:text-gray-400"> jenis</span>
+                                        <span class="text-gray-400 dark:text-gray-500">/</span>
+                                        <span class="font-semibold text-gray-900 dark:text-white">{{ $totalPcs }}</span>
+                                        <span class="text-gray-500 dark:text-gray-400"> PCS</span>
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-center">
+                                        <x-filament::badge :color="$isOpen ? 'warning' : 'success'" size="sm">
+                                            {{ $isOpen ? 'Dalam Proses' : 'Selesai' }}
+                                        </x-filament::badge>
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-right">
+                                        <x-filament::button
+                                            size="sm"
+                                            color="primary"
+                                            icon="heroicon-m-arrow-right"
+                                            wire:click="selectCheck({{ $row->id }})"
+                                        >
+                                            Buka
+                                        </x-filament::button>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                                        Belum ada pemeriksaan barang rusak.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @if ($checksPaginator->hasPages())
+                <div class="flex items-center justify-between">
+                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                        Menampilkan {{ $checksPaginator->firstItem() }}–{{ $checksPaginator->lastItem() }} dari {{ $checksPaginator->total() }} pemeriksaan
+                    </div>
+                    <div class="flex items-center gap-1">
+                        @if ($checksPaginator->onFirstPage())
+                            <span class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-600">&laquo; Sebelumnya</span>
+                        @else
+                            <button type="button" wire:click="loadChecksPage({{ $checksPaginator->currentPage() - 1 }})" class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">&laquo; Sebelumnya</button>
+                        @endif
+
+                        @foreach ($checksPaginator->getUrlRange(max(1, $checksPaginator->currentPage() - 2), min($checksPaginator->lastPage(), $checksPaginator->currentPage() + 2)) as $page => $url)
+                            @if ($page == $checksPaginator->currentPage())
+                                <span class="inline-flex items-center justify-center rounded-lg border border-primary-500 bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-700 dark:border-primary-600 dark:bg-primary-950/30 dark:text-primary-300">{{ $page }}</span>
+                            @else
+                                <button type="button" wire:click="loadChecksPage({{ $page }})" class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">{{ $page }}</button>
+                            @endif
+                        @endforeach
+
+                        @if ($checksPaginator->hasMorePages())
+                            <button type="button" wire:click="loadChecksPage({{ $checksPaginator->currentPage() + 1 }})" class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Berikutnya &raquo;</button>
+                        @else
+                            <span class="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-600">Berikutnya &raquo;</span>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
+            <x-filament::modal wire:model.live="showCreateModal" id="create-damage-check" width="2xl" heading="Header Pemeriksaan Baru" :sticky="true">
+                <form wire:submit="createCheck" id="createCheckForm" class="grid gap-4 md:grid-cols-3">
                     <div>
                         <label class="mb-1 block text-sm font-semibold">Tanggal</label>
                         <x-filament::input type="date" wire:model="checkDate" />
                         @error('checkDate') <div class="mt-1 text-sm text-danger-600">{{ $message }}</div> @enderror
                     </div>
-
-                    @if (auth()->user()->isCentralAdmin())
-                        <div>
-                            <label class="mb-1 block text-sm font-semibold">Cabang</label>
-                            <x-filament::input.wrapper>
-                                <x-filament::input.select wire:model.live="branchId">
-                                    <option value="">Pilih cabang</option>
-                                    @foreach ($this->getBranches() as $branch)
-                                        <option value="{{ $branch->id }}">{{ $branch->nama }}</option>
-                                    @endforeach
-                                </x-filament::input.select>
-                            </x-filament::input.wrapper>
-                            @error('branchId') <div class="mt-1 text-sm text-danger-600">{{ $message }}</div> @enderror
-                        </div>
-                    @endif
 
                     <div>
                         <label class="mb-1 block text-sm font-semibold">Principal (opsional)</label>
@@ -64,108 +192,45 @@
                     </div>
 
                     <div>
-                        <label class="mb-1 block text-sm font-semibold">Lokasi barang rusak</label>
-                        <x-filament::input wire:model="location" placeholder="Contoh: Gudang retur / Area rusak A" />
-                        @error('location') <div class="mt-1 text-sm text-danger-600">{{ $message }}</div> @enderror
-                    </div>
-
-                    <div>
                         <label class="mb-1 block text-sm font-semibold">PIN Bergabung</label>
                         <x-filament::input type="password" inputmode="numeric" wire:model="createJoinPin" placeholder="4–6 angka" autocomplete="new-password" />
                         @error('createJoinPin') <div class="mt-1 text-sm text-danger-600">PIN harus terdiri dari 4–6 angka.</div> @enderror
                     </div>
 
-                    <div class="md:col-span-2">
+                    @if (auth()->user()->isCentralAdmin())
+                        <div class="md:col-span-3">
+                            <label class="mb-1 block text-sm font-semibold">Cabang</label>
+                            <x-filament::input.wrapper>
+                                <x-filament::input.select wire:model.live="branchId">
+                                    <option value="">Pilih cabang</option>
+                                    @foreach ($this->getBranches() as $branch)
+                                        <option value="{{ $branch->id }}">{{ $branch->nama }}</option>
+                                    @endforeach
+                                </x-filament::input.select>
+                            </x-filament::input.wrapper>
+                            @error('branchId') <div class="mt-1 text-sm text-danger-600">{{ $message }}</div> @enderror
+                        </div>
+                    @endif
+
+                    <div class="md:col-span-3">
+                        <label class="mb-1 block text-sm font-semibold">Lokasi barang rusak</label>
+                        <x-filament::input wire:model="location" placeholder="Contoh: Gudang retur / Area rusak A" />
+                        @error('location') <div class="mt-1 text-sm text-danger-600">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="md:col-span-3">
                         <label class="mb-1 block text-sm font-semibold">Keterangan (opsional)</label>
                         <textarea wire:model="notes" rows="2" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900"></textarea>
                     </div>
-
-                    <div class="md:col-span-2">
-                        <x-filament::button type="submit" size="lg" icon="heroicon-m-play">Buat & Mulai Checker</x-filament::button>
-                    </div>
                 </form>
-            </x-filament::section>
 
-            <x-filament::section>
-                <x-slot name="heading">Pemeriksaan Terakhir</x-slot>
-
-                @if ($pendingJoinCheckId)
-                    <form wire:submit="submitJoin" class="mb-4 rounded-xl border border-warning-300 bg-warning-50 p-4 dark:border-warning-800 dark:bg-warning-950/20">
-                        <div class="font-semibold">Masukkan PIN pemeriksaan</div>
-                        <div class="mt-1 text-sm text-gray-500">PIN diberikan oleh pembuat header.</div>
-                        <div class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                            <x-filament::input type="password" inputmode="numeric" wire:model="joinPin" placeholder="PIN 4–6 angka" autocomplete="one-time-code" />
-                            <x-filament::button type="submit" icon="heroicon-m-lock-open" class="w-full sm:w-auto">Gabung</x-filament::button>
-                            <x-filament::button type="button" color="gray" wire:click="cancelJoin" class="w-full sm:w-auto">Batal</x-filament::button>
-                        </div>
-                        @error('joinPin') <div class="mt-1 text-sm text-danger-600">PIN harus terdiri dari 4–6 angka.</div> @enderror
-                    </form>
-                @endif
-
-                <div class="grid gap-3 sm:grid-cols-1 md:grid-cols-2">
-                    @forelse ($this->getRecentChecks() as $recent)
-                        @php
-                            $totalItems = $recent->items_count + $recent->pending_items_count;
-                            $totalPcs = ($recent->items_sum_qty_rusak_base ?? 0) + ($recent->pending_items_sum_qty_rusak_base ?? 0);
-                            $isOpen = $recent->status === \App\Enums\DamageCheckStatus::Open;
-                        @endphp
-                        <button
-                            type="button"
-                            wire:click="selectCheck({{ $recent->id }})"
-                            class="flex w-full flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary-500 hover:bg-primary-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-primary-500 dark:hover:bg-primary-950/20"
-                        >
-                            <div class="flex items-start justify-between gap-3 w-full">
-                                <div class="space-y-1">
-                                    <div class="flex items-center gap-2 font-mono text-sm font-semibold text-gray-950 dark:text-white">
-                                        <x-filament::icon icon="heroicon-m-document-text" class="h-4 w-4 text-primary-500" />
-                                        <span>{{ $recent->reference_number }}</span>
-                                    </div>
-                                    <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                                        <span class="inline-flex items-center gap-1 font-semibold text-gray-700 dark:text-gray-300">
-                                            <x-filament::icon icon="heroicon-m-building-office" class="h-3.5 w-3.5 text-gray-400" />
-                                            {{ $recent->branch->nama }}
-                                        </span>
-                                        <span>•</span>
-                                        <span class="inline-flex items-center gap-1">
-                                            <x-filament::icon icon="heroicon-m-map-pin" class="h-3.5 w-3.5 text-gray-400" />
-                                            {{ $recent->location }}
-                                        </span>
-                                    </div>
-                                    @if ($recent->notes)
-                                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 italic line-clamp-1">
-                                            Ket: {{ $recent->notes }}
-                                        </div>
-                                    @endif
-                                </div>
-                                <x-filament::badge :color="$isOpen ? 'warning' : 'success'" size="sm" class="shrink-0 font-medium">
-                                    {{ $isOpen ? 'Ketuk untuk bergabung' : 'Selesai' }}
-                                </x-filament::badge>
-                            </div>
-
-                            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400 w-full">
-                                <div class="flex items-center gap-1.5">
-                                    <x-filament::icon icon="heroicon-m-user" class="h-3.5 w-3.5 text-gray-400" />
-                                    <span>Petugas: <strong class="text-gray-800 dark:text-gray-200">{{ $recent->officer?->name ?? 'User Terhapus' }}</strong></span>
-                                </div>
-                                <div class="flex items-center gap-3 font-medium">
-                                    <span class="flex items-center gap-1">
-                                        <x-filament::icon icon="heroicon-m-users" class="h-3.5 w-3.5 text-gray-400" />
-                                        {{ $recent->checkers_count }}/5
-                                    </span>
-                                    <span class="flex items-center gap-1 text-primary-600 dark:text-primary-400 font-bold">
-                                        <x-filament::icon icon="heroicon-m-cube" class="h-3.5 w-3.5" />
-                                        {{ $totalItems }} jenis ({{ $totalPcs }} PCS)
-                                    </span>
-                                </div>
-                            </div>
-                        </button>
-                    @empty
-                        <div class="col-span-full rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500 dark:border-gray-700">
-                            Belum ada pemeriksaan barang rusak.
-                        </div>
-                    @endforelse
-                </div>
-            </x-filament::section>
+                <x-slot name="footer">
+                    <div class="flex items-center justify-end gap-2">
+                        <x-filament::button color="gray" wire:click="closeCreateModal">Batal</x-filament::button>
+                        <x-filament::button wire:click="createCheck" color="warning" icon="heroicon-m-plus">Buat & Mulai Checker</x-filament::button>
+                    </div>
+                </x-slot>
+            </x-filament::modal>
         @else
             @if ($check->status === \App\Enums\DamageCheckStatus::Open)
                 <x-filament::section>
@@ -437,6 +502,89 @@
                             <div class="flex gap-2"><x-filament::button type="submit" icon="heroicon-m-plus">Tambah & Catat</x-filament::button><x-filament::button type="button" color="gray" wire:click="cancelPendingItem">Batal</x-filament::button></div>
                         </form>
                     @endif
+                </x-filament::section>
+            @endif
+
+            @php($recentScanHistory = $this->getRecentScanHistory())
+            @if ($showScanHistory && $recentScanHistory->isNotEmpty())
+                <x-filament::section>
+                    <x-slot name="heading">
+                        <span class="flex items-center gap-2">
+                            Riwayat Scan
+                            <x-filament::badge color="warning" size="lg">{{ $recentScanHistory->count() }}</x-filament::badge>
+                        </span>
+                    </x-slot>
+                    <x-slot name="description">Item terakhir discan. Sesuaikan qty PCS manual jika perlu.</x-slot>
+
+                    <div class="space-y-2">
+                        @foreach ($recentScanHistory as $historyRow)
+                            <div class="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+                                <div class="min-w-0">
+                                    <div class="break-words text-sm font-semibold leading-snug">{{ $historyRow['name'] }}</div>
+                                    <div class="mt-0.5 truncate font-mono text-xs text-gray-500">
+                                        {{ $historyRow['principal'] }} · {{ $historyRow['code'] }}
+                                        @if ($historyRow['type'] === 'pending')
+                                            · Pending
+                                        @endif
+                                        · {{ $historyRow['last_scanned_at']?->format('H:i') ?? '-' }}
+                                    </div>
+                                    @if ($historyRow['scanner'])
+                                        <div class="mt-0.5 text-xs text-gray-500">Scan terakhir: {{ $historyRow['scanner'] }}</div>
+                                    @endif
+                                </div>
+
+                                <div class="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                                    @if ($check->status === \App\Enums\DamageCheckStatus::Open)
+                                        @if ($historyRow['type'] === 'pending')
+                                            <button type="button" wire:click="changePendingQuantity({{ $historyRow['id'] }}, -1)" @disabled($historyRow['qty_base'] <= 1) class="flex shrink-0 items-center justify-center rounded-lg bg-warning-500 text-xl font-bold text-white disabled:opacity-40" style="width: 44px; height: 44px;">−</button>
+                                        @else
+                                            <button type="button" wire:click="changeQuantity({{ $historyRow['id'] }}, -1)" @disabled($historyRow['qty_base'] <= 1) class="flex shrink-0 items-center justify-center rounded-lg bg-warning-500 text-xl font-bold text-white disabled:opacity-40" style="width: 44px; height: 44px;">−</button>
+                                        @endif
+                                    @endif
+                                    <div class="min-w-16 text-center text-base font-bold">{{ $historyRow['qty_display'] }}</div>
+                                    @if ($check->status === \App\Enums\DamageCheckStatus::Open)
+                                        @if ($historyRow['type'] === 'pending')
+                                            <button type="button" wire:click="changePendingQuantity({{ $historyRow['id'] }}, 1)" class="flex shrink-0 items-center justify-center rounded-lg bg-primary-600 text-xl font-bold text-white" style="width: 44px; height: 44px;">+</button>
+                                            <x-filament::modal width="xs">
+                                                <x-slot name="trigger">
+                                                    <button type="button" class="flex items-center justify-center rounded-lg bg-primary-600 text-sm font-black text-white" style="width:44px;height:44px">++</button>
+                                                </x-slot>
+
+                                                <x-slot name="heading">Tambah Qty</x-slot>
+
+                                                <div class="space-y-3">
+                                                    <div class="break-words text-sm font-semibold">{{ $historyRow['name'] }}</div>
+                                                    <x-filament::input type="number" min="1" wire:model="bulkQty.pending-{{ $historyRow['id'] }}" class="text-center text-lg font-bold" />
+                                                    <x-filament::button type="button" wire:click="addBulkPendingQuantity({{ $historyRow['id'] }})" class="w-full">Tambah</x-filament::button>
+                                                </div>
+                                            </x-filament::modal>
+                                            <button type="button" x-on:click.prevent="if (confirm('Hapus item ini?')) $wire.deletePendingItem({{ $historyRow['id'] }})" class="flex shrink-0 items-center justify-center rounded-lg bg-danger-600 text-white" style="width: 44px; height: 44px;">
+                                                <x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" />
+                                            </button>
+                                        @else
+                                            <button type="button" wire:click="changeQuantity({{ $historyRow['id'] }}, 1)" class="flex shrink-0 items-center justify-center rounded-lg bg-primary-600 text-xl font-bold text-white" style="width: 44px; height: 44px;">+</button>
+                                            <x-filament::modal width="xs">
+                                                <x-slot name="trigger">
+                                                    <button type="button" class="flex items-center justify-center rounded-lg bg-primary-600 text-sm font-black text-white" style="width:44px;height:44px">++</button>
+                                                </x-slot>
+
+                                                <x-slot name="heading">Tambah Qty</x-slot>
+
+                                                <div class="space-y-3">
+                                                    <div class="break-words text-sm font-semibold">{{ $historyRow['name'] }}</div>
+                                                    <x-filament::input type="number" min="1" wire:model="bulkQty.{{ $historyRow['id'] }}" class="text-center text-lg font-bold" />
+                                                    <x-filament::button type="button" wire:click="addBulkQuantity({{ $historyRow['id'] }})" class="w-full">Tambah</x-filament::button>
+                                                </div>
+                                            </x-filament::modal>
+                                            <button type="button" aria-label="Hapus salah scan" x-on:click.prevent="if (confirm('Hapus item salah scan ini?')) $wire.deleteItem({{ $historyRow['id'] }})" class="flex shrink-0 items-center justify-center rounded-lg bg-danger-600 text-white" style="width: 44px; height: 44px;">
+                                                <x-filament::icon icon="heroicon-m-trash" class="h-5 w-5" />
+                                            </button>
+                                        @endif
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
                 </x-filament::section>
             @endif
 
