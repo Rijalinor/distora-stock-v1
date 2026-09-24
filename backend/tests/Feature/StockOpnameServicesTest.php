@@ -89,6 +89,36 @@ class StockOpnameServicesTest extends TestCase
             'nama' => 'Principal Baru Dibuat',
             'status' => true,
         ]);
+
+        $item2 = ItemMaster::where('kode_barang', 'ITEM002')->first();
+        $this->assertNotNull($item2);
+        $this->assertEquals([['label' => 'PCS', 'factor' => 1]], $item2->qty_structure);
+    }
+
+    /** @test */
+    public function it_auto_generates_qty_structure_from_item_name_and_satuan()
+    {
+        // Case: BAYGON COIL STANDART MAX (1X60) with CTN-PCS
+        $structure1 = ItemMaster::generateDefaultQtyStructure('BAYGON COIL STANDART MAX (1X60)', 'CTN-PCS');
+        $this->assertEquals([
+            ['label' => 'CTN', 'factor' => 60],
+            ['label' => 'PCS', 'factor' => 1],
+        ], $structure1);
+
+        // Case: 3 levels (1X12X10) with CTN-SAC-PCS
+        $structure2 = ItemMaster::generateDefaultQtyStructure('ITEM MULTI LEVEL (1X12X10)', 'CTN-SAC-PCS');
+        $this->assertEquals([
+            ['label' => 'CTN', 'factor' => 120],
+            ['label' => 'SAC', 'factor' => 10],
+            ['label' => 'PCS', 'factor' => 1],
+        ], $structure2);
+
+        // Case: Only satuan CTN-PCS without pattern
+        $structure3 = ItemMaster::generateDefaultQtyStructure('BARANG BIASA', 'CTN-PCS');
+        $this->assertEquals([
+            ['label' => 'CTN', 'factor' => 1],
+            ['label' => 'PCS', 'factor' => 1],
+        ], $structure3);
     }
 
     /** @test */

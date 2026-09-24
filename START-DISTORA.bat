@@ -1,102 +1,367 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 
+title DISTORA - START ALL
+
+REM ============================================================
+REM CONFIGURATION
+REM ============================================================
+
+REM Folder tempat START-ALL.bat berada
 set "ROOT=%~dp0"
-set "BACKEND=%ROOT%backend"
+
+REM ============================================================
+REM PROJECT PATH
+REM ============================================================
+
+REM Distora Stock
+set "STOCK_BACKEND=%ROOT%backend"
+
+REM DistoraVision berada di sebelah folder distora-stock
+set "VISION_BACKEND=%ROOT%..\distoravision"
+
+REM XAMPP
 set "XAMPP=C:\xampp"
-set "NGROK_EXE=C:\ngrok\ngrok.exe"
-set "APP_PORT=8010"
-set "APP_URL=http://127.0.0.1:%APP_PORT%"
-set "NGROK_URL=https://unremonstrating-inconstantly-cynthia.ngrok-free.dev"
-set "CLOUDFLARE_TUNNEL_NAME="
-set "TUNNEL=%~1"
 
-if "%TUNNEL%"=="" set "TUNNEL=none"
+REM ============================================================
+REM PORT
+REM ============================================================
 
-echo ========================================
-echo  DISTORA STOCK - START
-echo ========================================
+set "STOCK_PORT=8010"
+set "VISION_PORT=8020"
+
+REM ============================================================
+REM LOCAL URL
+REM ============================================================
+
+set "STOCK_URL=http://127.0.0.1:%STOCK_PORT%"
+set "VISION_URL=http://127.0.0.1:%VISION_PORT%"
+
+REM ============================================================
+REM PUBLIC URL
+REM ============================================================
+
+set "STOCK_PUBLIC=https://app.oborbarumaju.id"
+set "VISION_PUBLIC=https://vision.oborbarumaju.id"
+
+REM ============================================================
+REM CLOUDFLARE
+REM ============================================================
+
+set "CLOUDFLARE_TUNNEL_NAME=oborbarumaju-app"
+
+
+echo.
+echo ============================================================
+echo              DISTORA SYSTEM - START ALL
+echo ============================================================
 echo.
 
-if not exist "%BACKEND%\artisan" (
-    echo Folder backend tidak ditemukan: %BACKEND%
+
+REM ============================================================
+REM CHECK DISTORA STOCK
+REM ============================================================
+
+echo [CHECK] Distora Stock...
+
+if not exist "%STOCK_BACKEND%\artisan" (
+    echo.
+    echo [ERROR] Backend Distora Stock tidak ditemukan!
+    echo.
+    echo Path:
+    echo %STOCK_BACKEND%
+    echo.
     pause
     exit /b 1
 )
 
-if exist "%XAMPP%\mysql_start.bat" (
-    tasklist /FI "IMAGENAME eq mysqld.exe" | find /I "mysqld.exe" >nul
-    if errorlevel 1 (
-        echo Membuka MySQL XAMPP...
-        start "Distora MySQL" /min cmd /k ""%XAMPP%\mysql_start.bat""
-    ) else (
-        echo MySQL sudah berjalan.
-    )
-) else (
-    echo XAMPP MySQL tidak ditemukan di %XAMPP%
-    echo Lewati start MySQL. Pastikan database sudah hidup.
+echo [OK] %STOCK_BACKEND%
+echo.
+
+
+REM ============================================================
+REM CHECK DISTORAVISION
+REM ============================================================
+
+echo [CHECK] DistoraVision...
+
+if not exist "%VISION_BACKEND%\artisan" (
+    echo.
+    echo [ERROR] Backend DistoraVision tidak ditemukan!
+    echo.
+    echo Path:
+    echo %VISION_BACKEND%
+    echo.
+    pause
+    exit /b 1
 )
 
-timeout /t 4 /nobreak >nul
+echo [OK] %VISION_BACKEND%
+echo.
 
-echo Membersihkan cache Laravel...
-pushd "%BACKEND%"
-php artisan optimize:clear
+
+REM ============================================================
+REM START MYSQL
+REM ============================================================
+
+echo ============================================================
+echo [1/4] MYSQL
+echo ============================================================
+echo.
+
+tasklist /FI "IMAGENAME eq mysqld.exe" | find /I "mysqld.exe" >nul
+
 if errorlevel 1 (
+
+    if exist "%XAMPP%\mysql_start.bat" (
+
+        echo MySQL belum berjalan.
+        echo Menjalankan MySQL XAMPP...
+
+        start "Distora MySQL" /min cmd /k ""%XAMPP%\mysql_start.bat""
+
+        timeout /t 4 /nobreak >nul
+
+        echo [OK] MySQL dijalankan.
+
+    ) else (
+
+        echo [WARNING] mysql_start.bat tidak ditemukan!
+        echo Path: %XAMPP%
+
+    )
+
+) else (
+
+    echo [OK] MySQL sudah berjalan.
+
+)
+
+echo.
+
+
+REM ============================================================
+REM CLEAR DISTORA STOCK CACHE
+REM ============================================================
+
+echo ============================================================
+echo [2/4] DISTORA STOCK
+echo ============================================================
+echo.
+
+pushd "%STOCK_BACKEND%"
+
+echo Membersihkan cache...
+
+php artisan optimize:clear
+
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Gagal menjalankan optimize:clear Distora Stock.
     popd
-    echo Gagal membersihkan cache Laravel.
     pause
     exit /b 1
 )
+
+echo [OK] Cache Distora Stock dibersihkan.
+
 popd
 
-echo Membuka Laravel...
-start "Distora Laravel" /min cmd /k "cd /d ""%BACKEND%"" && php artisan serve --host=127.0.0.1 --port=%APP_PORT%"
+echo.
 
-timeout /t 4 /nobreak >nul
 
-if /i "%TUNNEL%"=="none" goto browser
+REM ============================================================
+REM CLEAR DISTORAVISION CACHE
+REM ============================================================
 
-if /i "%TUNNEL%"=="cloudflare" (
-    where cloudflared >nul 2>nul
-    if errorlevel 1 (
-        echo cloudflared belum ada di PATH. Tunnel Cloudflare dilewati.
-    ) else (
-        echo Membuka Cloudflare Tunnel...
-        if "%CLOUDFLARE_TUNNEL_NAME%"=="" (
-            start "Distora Cloudflare Tunnel" /min cmd /k "cloudflared tunnel --url %APP_URL%"
-        ) else (
-            start "Distora Cloudflare Tunnel" /min cmd /k "cloudflared tunnel run %CLOUDFLARE_TUNNEL_NAME%"
-        )
-    )
-    goto browser
-)
+echo ============================================================
+echo [3/4] DISTORAVISION
+echo ============================================================
+echo.
 
-where ngrok >nul 2>nul
+pushd "%VISION_BACKEND%"
+
+echo Membersihkan cache...
+
+php artisan optimize:clear
+
 if errorlevel 1 (
-    if exist "%NGROK_EXE%" (
-        echo Membuka ngrok dari %NGROK_EXE%...
-        start "Distora ngrok" /min cmd /k ""%NGROK_EXE%" http %APP_PORT%"
-    ) else (
-        echo ngrok belum ada di PATH dan tidak ditemukan di %NGROK_EXE%.
-        echo Install ngrok atau jalankan: START-DISTORA.bat
-    )
-) else (
-    echo Membuka ngrok...
-    start "Distora ngrok" /min cmd /k "ngrok http %APP_PORT%"
+    echo.
+    echo [ERROR] Gagal menjalankan optimize:clear DistoraVision.
+    popd
+    pause
+    exit /b 1
 )
 
-:browser
-timeout /t 2 /nobreak >nul
+echo [OK] Cache DistoraVision dibersihkan.
 
-echo Membuka dashboard lokal...
-if /i "%TUNNEL%"=="ngrok" (
-    start "" "%NGROK_URL%/admin"
+popd
+
+echo.
+
+
+REM ============================================================
+REM START DISTORA STOCK
+REM ============================================================
+
+echo ------------------------------------------------------------
+echo Starting Distora Stock :%STOCK_PORT%
+echo ------------------------------------------------------------
+
+netstat -ano | findstr ":%STOCK_PORT%" | findstr "LISTENING" >nul
+
+if errorlevel 1 (
+
+    echo Membuka Laravel Distora Stock...
+
+    start "Distora Stock - Laravel" /min cmd /k ^
+    "cd /d ""%STOCK_BACKEND%"" && php artisan serve --host=127.0.0.1 --port=%STOCK_PORT%"
+
+    echo [OK] Distora Stock dijalankan.
+
 ) else (
-    start "" "%APP_URL%/admin"
+
+    echo [OK] Distora Stock sudah berjalan.
+
 )
 
 echo.
-echo Selesai. Jangan tutup window MySQL/Laravel/Tunnel selama dipakai.
-echo Untuk stop, jalankan STOP-DISTORA.bat
+
+
+REM ============================================================
+REM START DISTORAVISION
+REM ============================================================
+
+echo ------------------------------------------------------------
+echo Starting DistoraVision :%VISION_PORT%
+echo ------------------------------------------------------------
+
+netstat -ano | findstr ":%VISION_PORT%" | findstr "LISTENING" >nul
+
+if errorlevel 1 (
+
+    echo Membuka Laravel DistoraVision...
+
+    start "DistoraVision - Laravel" /min cmd /k ^
+    "cd /d ""%VISION_BACKEND%"" && php artisan serve --host=127.0.0.1 --port=%VISION_PORT%"
+
+    echo [OK] DistoraVision dijalankan.
+
+) else (
+
+    echo [OK] DistoraVision sudah berjalan.
+
+)
+
+echo.
+
+
+REM ============================================================
+REM WAIT LARAVEL
+REM ============================================================
+
+echo Menunggu Laravel siap...
+
+timeout /t 5 /nobreak >nul
+
+echo.
+
+
+REM ============================================================
+REM CLOUDFLARE TUNNEL
+REM ============================================================
+
+echo ============================================================
+echo [4/4] CLOUDFLARE TUNNEL
+echo ============================================================
+echo.
+
+tasklist /FI "IMAGENAME eq cloudflared.exe" | find /I "cloudflared.exe" >nul
+
+if errorlevel 1 (
+
+    where cloudflared >nul 2>nul
+
+    if errorlevel 1 (
+
+        echo [ERROR] cloudflared tidak ditemukan di PATH!
+        echo.
+        echo Aplikasi lokal tetap dijalankan.
+        echo Cloudflare Tunnel tidak dijalankan.
+
+    ) else (
+
+        echo Menjalankan tunnel:
+        echo %CLOUDFLARE_TUNNEL_NAME%
+        echo.
+
+        start "Distora - Cloudflare Tunnel" /min cmd /k ^
+        "cloudflared tunnel run %CLOUDFLARE_TUNNEL_NAME%"
+
+        timeout /t 5 /nobreak >nul
+
+        echo [OK] Cloudflare Tunnel dijalankan.
+
+    )
+
+) else (
+
+    echo [OK] Cloudflare Tunnel sudah berjalan.
+    echo Menggunakan tunnel yang sama untuk Stock dan Vision.
+
+)
+
+echo.
+
+
+REM ============================================================
+REM OPEN WEBSITE
+REM ============================================================
+
+echo ============================================================
+echo OPENING APPLICATION
+echo ============================================================
+echo.
+
 timeout /t 3 /nobreak >nul
+
+echo Membuka Distora Stock Admin...
+start "" "https://app.oborbarumaju.id/admin"
+
+timeout /t 2 /nobreak >nul
+
+echo Membuka DistoraVision...
+start "" "%VISION_PUBLIC%"
+
+echo.
+
+
+REM ============================================================
+REM FINAL
+REM ============================================================
+
+echo ============================================================
+echo                 DISTORA SYSTEM READY
+echo ============================================================
+echo.
+echo Distora Stock
+echo   Local  : %STOCK_URL%
+echo   Public : %STOCK_PUBLIC%
+echo   Port   : %STOCK_PORT%
+echo.
+echo DistoraVision
+echo   Local  : %VISION_URL%
+echo   Public : %VISION_PUBLIC%
+echo   Port   : %VISION_PORT%
+echo.
+echo Cloudflare Tunnel
+echo   Name   : %CLOUDFLARE_TUNNEL_NAME%
+echo.
+echo ============================================================
+echo.
+echo Jangan tutup window Laravel dan Cloudflare Tunnel.
+echo.
+echo Tekan tombol apa saja untuk keluar dari window ini.
+pause >nul
+
+endlocal

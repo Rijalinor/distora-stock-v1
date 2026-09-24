@@ -267,15 +267,22 @@ class CsvImportService
                 }
 
                 // We update the name/satuan/principal but keep the barcode unchanged
-                ItemMaster::updateOrCreate(
-                    ['branch_id' => $branchId, 'kode_barang' => $row->itemKode],
-                    [
-                        'nama_barang' => $row->itemNama,
-                        'principal_id' => $principalId,
-                        'satuan' => $row->satuan,
-                        'status' => true
-                    ]
-                );
+                $itemMaster = ItemMaster::firstOrNew([
+                    'branch_id' => $branchId,
+                    'kode_barang' => $row->itemKode,
+                ]);
+
+                $itemMaster->nama_barang = $row->itemNama;
+                $itemMaster->principal_id = $principalId;
+                $itemMaster->satuan = $row->satuan;
+                $itemMaster->status = true;
+
+                // Auto-generate qty_structure if not yet set
+                if (empty($itemMaster->qty_structure)) {
+                    $itemMaster->qty_structure = ItemMaster::generateDefaultQtyStructure($row->itemNama, $row->satuan);
+                }
+
+                $itemMaster->save();
             }
         });
     }

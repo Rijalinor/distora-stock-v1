@@ -132,4 +132,79 @@ class ItemMaster extends Model
             return is_array($level) && filled(trim((string) ($level['label'] ?? '')));
         }));
     }
+
+    /**
+     * Parse and build default qty_structure from itemName and/or satuan (Size).
+     * Example: itemName="BAYGON COIL STANDART MAX (1X60)", satuan="CTN-PCS"
+     * -> [ ['label' => 'CTN', 'factor' => 60], ['label' => 'PCS', 'factor' => 1] ]
+     *
+     * @return array<int, array{label: string, factor: int}>
+     */
+    public static function generateDefaultQtyStructure(?string $itemName, ?string $satuan = null): array
+    {
+        $itemName = trim((string) $itemName);
+        $satuan = trim((string) $satuan);
+
+        // 1. Determine unit labels
+        $labels = [];
+        if ($satuan !== '') {
+            $labels = array_values(array_filter(array_map('trim', explode('-', $satuan))));
+            $labels = array_map('strtoupper', $labels);
+        }
+
+        // If no labels from satuan, deduce from itemName factor
+        $parsedFactors = \App\Services\StockScanningService::parseConversionFactors($itemName);
+        if (empty($labels)) {
+            if (count($parsedFactors) === 1 && $parsedFactors[0] === 1) {
+                $labels = ['PCS'];
+            } elseif (count($parsedFactors) === 1) {
+                $labels = ['CTN', 'PCS'];
+            } elseif (count($parsedFactors) === 2) {
+                $labels = ['CTN', 'PCK', 'PCS'];
+            } else {
+                $labels = ['CTN', 'PCS'];
+            }
+        }
+
+        // If single unit (e.g. PCS)
+        if (count($labels) <= 1) {
+            $onlyLabel = $labels[0] ?? 'PCS';
+            return [
+                ['label' => $onlyLabel, 'factor' => 1],
+            ];
+        }
+
+        // For multiple units, calculate factor to smallest unit
+        // parsedFactors from (1X60) is [60], or (1X12X10) is [12, 10]
+        $structure = [];
+        $totalLevels = count($labels);
+
+        // Map factors to each level
+        for ($i = 0; $i < $totalLevels; $i++) {
+            $label = $labels[$i];
+            if ($i === $totalLevels - 1) {
+                // Smallest unit is always factor 1
+                $factor = 1;
+            } else {
+                // If parsed factors match level count
+                if (!empty($parsedFactors)) {
+                    $multiplier = 1;
+                    for ($j = $i; $j < count($parsedFactors); $j++) {
+                        $multiplier *= $parsedFactors[$j];
+                    }
+                    $factor = max(1, $multiplier);
+                } else {
+                    $factor = 1;
+                }
+            }
+
+            $structure[] = [
+                'label' => $label,
+                'factor' => $factor,
+            ];
+        }
+
+        return $structure;
+    }
 }
+

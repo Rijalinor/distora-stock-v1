@@ -84,6 +84,95 @@ class ItemMastersTable
                         })),
             ])
             ->recordActions([
+                \Filament\Actions\Action::make('quickBarcodes')
+                    ->label('Barcode')
+                    ->icon('heroicon-m-qr-code')
+                    ->color('info')
+                    ->modalHeading(fn (ItemMaster $record) => "Kelola Barcode: {$record->nama_barang} ({$record->kode_barang})")
+                    ->modalDescription('Tambah atau perbarui barcode kemasan barang ini secara cepat.')
+                    ->modalWidth('2xl')
+                    ->fillForm(fn (ItemMaster $record): array => [
+                        'barcodes' => $record->barcodes()->get()->map(fn ($b) => [
+                            'id' => $b->id,
+                            'barcode' => $b->barcode,
+                            'unit_label' => $b->unit_label,
+                            'qty_base' => $b->qty_base,
+                            'is_primary' => (bool) $b->is_primary,
+                        ])->all(),
+                    ])
+                    ->form([
+                        \Filament\Forms\Components\Repeater::make('barcodes')
+                            ->label('Daftar Barcode Kemasan')
+                            ->addActionLabel('Tambah Barcode Kemasan')
+                            ->columns(['default' => 1, 'md' => 12])
+                            ->schema([
+                                \Filament\Forms\Components\TextInput::make('barcode')
+                                    ->label('Barcode')
+                                    ->required()
+                                    ->distinct()
+                                    ->columnSpan(['default' => 1, 'md' => 5])
+                                    ->suffixAction(
+                                        \Filament\Actions\Action::make('scanBarcode')
+                                            ->icon('heroicon-m-camera')
+                                            ->tooltip('Scan Barcode dengan Kamera')
+                                            ->alpineClickHandler('$dispatch(\'item-master-open-barcode-scanner\', { input: $el.closest(\'.fi-input-wrp\')?.querySelector(\'input\') })')
+                                    ),
+                                \Filament\Forms\Components\TextInput::make('unit_label')
+                                    ->label('Kemasan')
+                                    ->placeholder('PCS/CTN')
+                                    ->default('PCS')
+                                    ->columnSpan(['default' => 1, 'md' => 3])
+                                    ->required(),
+                                \Filament\Forms\Components\TextInput::make('qty_base')
+                                    ->label('Qty PCS')
+                                    ->numeric()
+                                    ->minValue(1)
+                                    ->default(1)
+                                    ->columnSpan(['default' => 1, 'md' => 2])
+                                    ->required(),
+                                \Filament\Forms\Components\Toggle::make('is_primary')
+                                    ->label('Utama')
+                                    ->columnSpan(['default' => 1, 'md' => 2]),
+                            ]),
+                        \Filament\Schemas\Components\View::make('filament.forms.components.barcode-scanner')
+                            ->columnSpanFull(),
+                    ])
+                    ->action(function (ItemMaster $record, array $data): void {
+                        $submitted = $data['barcodes'] ?? [];
+                        
+                        // Sync barcodes
+                        $existingIds = [];
+                        foreach ($submitted as $row) {
+                            if (blank($row['barcode'] ?? null)) {
+                                continue;
+                            }
+                            $barcodeModel = !empty($row['id']) 
+                                ? $record->barcodes()->find($row['id']) 
+                                : null;
+                                
+                            if (!$barcodeModel) {
+                                $barcodeModel = $record->barcodes()->make([
+                                    'branch_id' => $record->branch_id,
+                                ]);
+                            }
+
+                            $barcodeModel->barcode = trim($row['barcode']);
+                            $barcodeModel->unit_label = strtoupper(trim($row['unit_label'] ?: 'PCS'));
+                            $barcodeModel->qty_base = max(1, (int) ($row['qty_base'] ?: 1));
+                            $barcodeModel->is_primary = !empty($row['is_primary']);
+                            $barcodeModel->save();
+
+                            $existingIds[] = $barcodeModel->id;
+                        }
+
+                        // Delete removed barcodes
+                        $record->barcodes()->whereNotIn('id', $existingIds)->delete();
+                        
+                        \Filament\Notifications\Notification::make()
+                            ->title('Barcode berhasil diperbarui')
+                            ->success()
+                            ->send();
+                    }),
                 EditAction::make(),
             ])
             ->toolbarActions([
